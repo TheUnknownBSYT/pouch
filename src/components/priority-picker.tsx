@@ -1,5 +1,4 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { getPriorityColor, radii, spacing, typography, useThemeColors } from '@/constants/ui';

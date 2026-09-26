@@ -61,9 +61,7 @@
     "apple:clear-keychain": "node _support/scripts/clear-apple-keychain.js siddhantbudhia@gmail.com",
     "eas:login": "eas login",
     "eas:logout": "eas logout",
-    "eas": "eas",
-    "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run lint && npm test -- --runInBand"
+    "eas": "eas"
   },
   "jest": {
     "preset": "jest-expo",

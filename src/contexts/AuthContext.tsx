@@ -1,7 +1,7 @@
 /**
  * AuthContext.tsx — login state for the whole app
  *
- * Flow: request a sign-in link → open email link → session persists.
+ * Flow: sendEmailCode → user enters 6-digit OTP → verifyEmailCode
  * Session persists via Supabase + AsyncStorage (see lib/supabase.ts).
  */
 import type { Session, User } from '@supabase/supabase-js';
@@ -18,48 +18,39 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   lastEmail: string | null;
-  sendSignInLink: (email: string) => Promise<{ error: string | null }>;
-  authError: string | null;
+  sendEmailCode: (email: string) => Promise<{ error: string | null }>;
+  verifyEmailCode: (email: string, code: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [authError, setAuthError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastEmail, setLastEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    void getLastEmail().then(setLastEmail).catch(() => setLastEmail(null));
-    return subscribeToAuthLinks(setAuthError);
+    void getLastEmail().then(setLastEmail);
+    return subscribeToAuthLinks();
   }, []);
 
   useEffect(() => {
-    let active = true;
-    let authEventReceived = false;
     supabase.auth.getSession().then(({ data }) => {
-      if (!active || authEventReceived) return;
       setSession(data.session);
       setLoading(false);
-    }).catch(() => {
-      if (active && !authEventReceived) setLoading(false);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      authEventReceived = true;
-      if (!active) return;
       setSession(nextSession);
       setLoading(false);
       if (nextSession?.user.email) {
-        void saveLastEmail(nextSession.user.email).catch(() => undefined);
+        void saveLastEmail(nextSession.user.email);
         setLastEmail(nextSession.user.email);
       }
     });
 
     return () => {
-      active = false;
       subscription.subscription.unsubscribe();
     };
   }, []);
@@ -70,9 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: session?.user ?? null,
       loading,
       lastEmail,
-      authError,
-      sendSignInLink: async (email: string) => {
-        setAuthError(null);
+      sendEmailCode: async (email: string) => {
         const trimmed = email.trim().toLowerCase();
         const { error } = await supabase.auth.signInWithOtp({
           email: trimmed,
@@ -81,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             emailRedirectTo:
               Platform.OS === 'web' && typeof window !== 'undefined'
                 ? `${window.location.origin}/`
-                : Linking.createURL('auth'),
+                : Linking.createURL('auth/callback'),
           },
         });
 
@@ -92,12 +81,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         return { error: error?.message ?? null };
       },
+      verifyEmailCode: async (email: string, code: string) => {
+        const trimmed = email.trim().toLowerCase();
+        const token = code.trim();
+
+        const { error } = await supabase.auth.verifyOtp({
+          email: trimmed,
+          token,
+          type: 'email',
+        });
+
+        if (!error) {
+          await saveLastEmail(trimmed);
+          setLastEmail(trimmed);
+        }
+
+        return { error: error?.message ?? null };
+      },
       signOut: async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
+        await supabase.auth.signOut();
       },
     }),
-    [authError, lastEmail, loading, session],
+    [lastEmail, loading, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

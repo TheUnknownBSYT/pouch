@@ -25,7 +25,7 @@ Run SQL migrations in Supabase (in order if upgrading an existing DB):
 ```
 Open app → (signed in?) → Inbox
                 ↓ no
-           Auth: email → sign-in link → session saved locally
+           Auth: email → 6-digit code → session saved locally
 
 Inbox: type in bottom bar → Enter → classifyItem() → insert Supabase → list updates (realtime)
 
@@ -34,7 +34,7 @@ Tap row → Item detail → edit / delete / task priority / expense account
 Footer → Accounts → balances + monthly CSV export
 ```
 
-**Auth persistence:** After you open the sign-in link once, Supabase stores a refresh token in AsyncStorage (mobile) or localStorage (web). You should not need to log in every visit unless you sign out or clear site data.
+**Auth persistence:** After you verify the email code once, Supabase stores a refresh token in AsyncStorage (mobile) or localStorage (web). You should not need to log in every visit unless you sign out or clear site data.
 
 ---
 
@@ -47,13 +47,13 @@ Footer → Accounts → balances + monthly CSV export
 | --------------------------------- | ------------------------------------------------- |
 | `src/app/index.tsx`               | Inbox screen — list, search, filters, capture bar |
 | `src/app/item/[id].tsx`           | Item detail — edit, delete, task/expense fields   |
-| `src/app/auth.tsx`                | Email sign-in link UI                              |
+| `src/app/auth.tsx`                | Email + OTP login UI                              |
 | `src/app/accounts.tsx`            | Cash/GPay balances + CSV export                   |
 | `src/app/_layout.tsx`             | Root navigation, auth gate, share-intent wrapper  |
 | `src/lib/classifyItem.ts`         | **Auto-detection rules** (link, expense, task, …) |
 | `src/lib/items.ts`                | Supabase CRUD for items                           |
 | `src/lib/urls.ts`                 | URL parsing + split text so only links are blue   |
-| `src/contexts/AuthContext.tsx`    | Login state + email links                                 |
+| `src/contexts/AuthContext.tsx`    | Login state + OTP                                 |
 | `src/contexts/ItemsContext.tsx`   | Shared inbox state + realtime                     |
 | `src/types/item.ts`               | TypeScript types for items                        |
 | `src/constants/ui.ts`             | Colors, typography                                |
@@ -120,12 +120,11 @@ Run: `npm test`
 On save, `classifyItem(content)` in `src/lib/classifyItem.ts` runs **before** insert:
 
 1. URL present → **link**
-2. Explicit reminders / buy / pay intentions → **task**
-3. Money keywords + number → **expense** (cash/gpay, in/out)
-4. Phone number → **contact**
-5. Quoted / forwarded text → **quote**
-6. Task verbs / todo / urgent → **task** (+ priority, due date hints)
-7. Else → **note**
+2. Money keywords + number → **expense** (cash/gpay, in/out)
+3. Phone number → **contact**
+4. Quoted / forwarded text → **quote**
+5. Task verbs / todo / urgent → **task** (+ priority, due date hints)
+6. Else → **note**
 
 Priority order matters: a string with both a URL and "spent 500" becomes a **link**.
 
@@ -244,17 +243,8 @@ Until then, extend `classifyItem.ts` — it's the right tool.
 
 ## Supabase
 
-- **Auth:** Email sign-in links; session in client storage
+- **Auth:** Email OTP; session in client storage
 - **Table:** `items` with RLS (`user_id = auth.uid()`)
 - **Realtime:** inbox subscribes to `postgres_changes` on `items`
 
 Dashboard: [supabase.com/dashboard](https://supabase.com/dashboard)
-## Settings
-
-Open Settings from the inbox footer. Appearance supports System, Light, and Dark across the app. Haptic feedback and inbox sort order are saved on this device. Settings also contains account information, sign-out, and a shortcut to monthly CSV exports.
-
-## Sign-in link configuration
-
-The sign-in screen uses the existing Supabase magic-link email template (`{{ .ConfirmationURL }}`). No numeric code is required. Successful links persist a session; expired or invalid links show an error with an option to request another link. Resend has a 60-second cooldown.
-
-Supabase Authentication → URL Configuration must allow the app's redirect addresses: the deployed web origin, local development origins (for example `http://localhost:8082/`), and `pouch://auth` for native builds. Expo Go uses its own development URL from `Linking.createURL('auth')`. Hosted redirect settings are not stored in this repository and were not changed.

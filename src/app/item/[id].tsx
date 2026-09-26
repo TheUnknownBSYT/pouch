@@ -1,8 +1,7 @@
-import { useColorScheme, useSettings } from '@/contexts/SettingsContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -11,6 +10,7 @@ import {
   Switch,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 
@@ -37,7 +37,6 @@ import { ACCOUNT_LABELS } from '@/types/item';
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { settings } = useSettings();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = useThemeColors(isDark);
@@ -48,7 +47,7 @@ export default function ItemDetailScreen() {
   const [item, setItem] = useState<Item | null>(cachedItem);
   const [content, setContent] = useState(cachedItem?.content ?? '');
   const [occurredAt, setOccurredAt] = useState(
-    () => new Date(cachedItem?.occurred_at ?? cachedItem?.created_at ?? Date.now()),
+    new Date(cachedItem?.occurred_at ?? cachedItem?.created_at ?? Date.now()),
   );
   const [account, setAccount] = useState<AccountSlug>(cachedItem?.account ?? 'cash');
   const [direction, setDirection] = useState<TransactionDirection>(cachedItem?.direction ?? 'out');
@@ -63,14 +62,11 @@ export default function ItemDetailScreen() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const hydratedId = useRef<string | null>(cachedItem?.id ?? null);
-
   useEffect(() => {
-    if (!cachedItem || hydratedId.current === cachedItem.id) {
+    if (!cachedItem) {
       return;
     }
 
-    hydratedId.current = cachedItem.id;
     setItem(cachedItem);
     setContent(cachedItem.content);
     setOccurredAt(new Date(cachedItem.occurred_at ?? cachedItem.created_at));
@@ -108,7 +104,6 @@ export default function ItemDetailScreen() {
       }
 
       const loaded = data as Item;
-      hydratedId.current = loaded.id;
       setItem(loaded);
       setContent(loaded.content);
       setOccurredAt(new Date(loaded.occurred_at ?? loaded.created_at));
@@ -149,13 +144,12 @@ export default function ItemDetailScreen() {
     try {
       const payload: Parameters<typeof saveItem>[1] = {
         content: trimmed,
-        type: item.type,
         occurred_at: occurredAt.toISOString(),
       };
 
       if (item.type === 'expense') {
         const parsedAmount = amount.trim()
-          ? Number(amount.replace(/,/g, ''))
+          ? Number.parseFloat(amount.replace(/,/g, ''))
           : null;
         if (amount.trim() && (!Number.isFinite(parsedAmount!) || parsedAmount! <= 0)) {
           setError('Enter a valid amount');
@@ -176,13 +170,13 @@ export default function ItemDetailScreen() {
       const updated = await saveItem(item.id, payload);
       setItem(updated);
       setContent(updated.content);
-      if (settings.haptics) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
-  }, [account, amount, content, direction, dueAt, item, occurredAt, priority, saveItem, saving, settings.haptics]);
+  }, [account, amount, content, direction, dueAt, item, occurredAt, priority, saveItem, saving]);
 
   const handleToggleDone = useCallback(async () => {
     if (!item || item.type !== 'task') {
@@ -192,11 +186,11 @@ export default function ItemDetailScreen() {
     try {
       const updated = await saveItem(item.id, { done: !item.done });
       setItem(updated);
-      if (settings.haptics) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update task');
     }
-  }, [item, saveItem, settings.haptics]);
+  }, [item, saveItem]);
 
   const handleTypeChange = useCallback(
     async (type: ItemType) => {
@@ -212,7 +206,7 @@ export default function ItemDetailScreen() {
           direction: item.direction,
           priority: item.priority,
           due_at: item.due_at,
-        }, saveItem);
+        });
         setItem(updated);
         if (updated.type === 'expense') {
           setAccount(updated.account ?? 'cash');
@@ -227,7 +221,7 @@ export default function ItemDetailScreen() {
         setError(err instanceof Error ? err.message : 'Failed to change type');
       }
     },
-    [content, item, saveItem],
+    [content, item],
   );
 
   const handleDelete = useCallback(async () => {
@@ -240,14 +234,14 @@ export default function ItemDetailScreen() {
 
     try {
       await removeItem(item.id);
-      if (settings.haptics) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setShowDeleteDialog(false);
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
       setDeleting(false);
     }
-  }, [item, removeItem, router, settings.haptics]);
+  }, [item, removeItem, router]);
 
   const handleOpenLink = useCallback(async () => {
     if (!linkUrl) {
@@ -317,8 +311,8 @@ export default function ItemDetailScreen() {
           <PressableScale
             onPress={() => void handleOpenLink()}
             style={[styles.openLinkButton, { backgroundColor: theme.accent }]}>
-            <Ionicons color={theme.onAccent} name="open-outline" size={18} />
-            <Text numberOfLines={1} style={[styles.openLinkText, { color: theme.onAccent }]}>
+            <Ionicons color="#FFFFFF" name="open-outline" size={18} />
+            <Text numberOfLines={1} style={styles.openLinkText}>
               Open link
             </Text>
           </PressableScale>
@@ -339,12 +333,7 @@ export default function ItemDetailScreen() {
               <PriorityPicker value={priority} onChange={setPriority} />
             </View>
             {dueAt ? (
-              <View style={styles.section}>
-                <DateField label="Due date" value={dueAt} onChange={setDueAt} />
-                <PressableScale onPress={() => setDueAt(null)} accessibilityRole="button">
-                  <Text style={{ color: theme.accent }}>Remove due date</Text>
-                </PressableScale>
-              </View>
+              <DateField label="Due date" value={dueAt} onChange={setDueAt} />
             ) : (
               <PressableScale
                 scaleTo={0.98}
@@ -361,14 +350,14 @@ export default function ItemDetailScreen() {
             <PressableScale
               onPress={() => void callPhone(item.content)}
               style={[styles.openLinkButton, { backgroundColor: theme.accent, flex: 1 }]}>
-              <Ionicons color={theme.onAccent} name="call-outline" size={18} />
-              <Text style={[styles.openLinkText, { color: theme.onAccent }]}>Call</Text>
+              <Ionicons color="#FFFFFF" name="call-outline" size={18} />
+              <Text style={styles.openLinkText}>Call</Text>
             </PressableScale>
             <PressableScale
               onPress={() => void openWhatsApp(item.content)}
               style={[styles.openLinkButton, { backgroundColor: '#25D366', flex: 1 }]}>
-              <Ionicons color={theme.onAccent} name="logo-whatsapp" size={18} />
-              <Text style={[styles.openLinkText, { color: theme.onAccent }]}>WhatsApp</Text>
+              <Ionicons color="#FFFFFF" name="logo-whatsapp" size={18} />
+              <Text style={styles.openLinkText}>WhatsApp</Text>
             </PressableScale>
           </View>
         ) : null}
@@ -394,7 +383,7 @@ export default function ItemDetailScreen() {
                     styles.optionChip,
                     { backgroundColor: account === slug ? theme.accent : theme.inputBackground },
                   ]}>
-                  <Text style={{ color: account === slug ? theme.onAccent : theme.text, fontWeight: '700' }}>
+                  <Text style={{ color: account === slug ? '#FFFFFF' : theme.text, fontWeight: '700' }}>
                     {ACCOUNT_LABELS[slug]}
                   </Text>
                 </PressableScale>
@@ -410,7 +399,7 @@ export default function ItemDetailScreen() {
                     styles.optionChip,
                     { backgroundColor: direction === value ? theme.accent : theme.inputBackground },
                   ]}>
-                  <Text style={{ color: direction === value ? theme.onAccent : theme.text, fontWeight: '700' }}>
+                  <Text style={{ color: direction === value ? '#FFFFFF' : theme.text, fontWeight: '700' }}>
                     {value === 'in' ? 'Money in' : 'Money out'}
                   </Text>
                 </PressableScale>
@@ -442,10 +431,9 @@ export default function ItemDetailScreen() {
         {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
 
         <PressableScale
-          disabled={saving || deleting}
           onPress={() => void handleSave()}
           style={[styles.primaryButton, { backgroundColor: theme.accent }]}>
-          <Text style={[styles.primaryButtonText, { color: theme.onAccent }]}>Save changes</Text>
+          <Text style={styles.primaryButtonText}>Save changes</Text>
         </PressableScale>
 
         <PressableScale
@@ -477,11 +465,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   container: {
-    width: '100%',
-    maxWidth: 760,
-    alignSelf: 'center',
     gap: spacing.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
   },
   headerSpinner: {
     marginRight: spacing.sm,
@@ -522,7 +507,7 @@ const styles = StyleSheet.create({
   previewCard: {
     borderRadius: radii.xl,
     gap: spacing.sm + 2,
-    padding: spacing.xl,
+    padding: spacing.lg,
   },
   openLinkButton: {
     alignItems: 'center',
@@ -541,7 +526,7 @@ const styles = StyleSheet.create({
   taskCard: {
     borderRadius: radii.xl,
     gap: spacing.md + 2,
-    padding: spacing.xl,
+    padding: spacing.lg,
   },
   taskRow: {
     alignItems: 'center',
@@ -592,10 +577,10 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 26,
     minHeight: 200,
-    padding: spacing.xl,
+    padding: spacing.lg,
   },
   linkInput: {
-    textDecorationLine: 'underline',
+    color: '#2563EB',
   },
   quoteInput: {
     fontStyle: 'italic',

@@ -14,19 +14,19 @@ const ICONS: Record<ItemType, keyof typeof Ionicons.glyphMap> = {
 // Slightly desaturated / deepened versions of the originals — reads as considered
 // rather than "default Tailwind palette."
 const TYPE_COLORS: Record<ItemType, string> = {
-  note: '#677168',
-  link: '#286447',
-  task: '#946722',
-  expense: '#286447',
-  unsorted: '#737C74',
-  contact: '#677168',
-  quote: '#677168',
+  note: '#6E62E8',
+  link: '#0C9BDE',
+  task: '#E0900A',
+  expense: '#12A16B',
+  unsorted: '#9A9AA6',
+  contact: '#E8578F',
+  quote: '#8562EA',
 };
 
 const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  low: '#737C74',
-  medium: '#946722',
-  high: '#B34436',
+  low: '#9A9AA6',
+  medium: '#E0900A',
+  high: '#E5484D',
 };
 
 export function getItemIcon(type: ItemType): keyof typeof Ionicons.glyphMap {
@@ -65,18 +65,18 @@ export const spacing = {
 };
 
 export const radii = {
-  sm: 6,
-  md: 10,
-  lg: 12,
-  xl: 16,
-  xxl: 20,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 26,
   full: 999,
 };
 
 export const typography = {
   display: {
     fontSize: 30,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     letterSpacing: -0.6,
   },
   title: {
@@ -118,37 +118,35 @@ export const typography = {
 };
 
 export const colors = {
-  background: '#F7F6F2',
+  background: '#FAFAFA',
   surface: '#FFFFFF',
-  border: '#DEE2D9',
-  borderStrong: '#C8CFC4',
-  text: '#202A23',
-  textMuted: '#677168',
-  textFaint: '#737C74',
-  accent: '#286447',
-  onAccent: '#FFFFFF',
-  accentMuted: '#E7EFE5',
-  danger: '#B34436',
-  dangerMuted: '#F9EAE5',
-  inputBackground: '#EEEFE8',
-  success: '#286447',
+  border: '#EBEBEF',
+  borderStrong: '#DEDEE4',
+  text: '#131316',
+  textMuted: '#6F6F79',
+  textFaint: '#A8A8B3',
+  accent: '#5750E8',
+  accentMuted: '#EFEEFE',
+  danger: '#E5484D',
+  dangerMuted: '#FCEBEC',
+  inputBackground: '#F3F3F5',
+  success: '#12A16B',
 };
 
 export const darkColors = {
-  background: '#151A17',
-  surface: '#1E2520',
-  border: '#354139',
-  borderStrong: '#4A594E',
-  text: '#F1F4EE',
-  textMuted: '#ACB7AD',
-  textFaint: '#99A59A',
-  accent: '#70BA90',
-  onAccent: '#10281B',
-  accentMuted: '#263F30',
+  background: '#0A0A0C',
+  surface: '#161618',
+  border: '#26262A',
+  borderStrong: '#35353A',
+  text: '#F5F5F7',
+  textMuted: '#9E9EA8',
+  textFaint: '#68686F',
+  accent: '#8A83F7',
+  accentMuted: '#211F3D',
   danger: '#FF6369',
   dangerMuted: '#3A1E20',
-  inputBackground: '#29322C',
-  success: '#70BA90',
+  inputBackground: '#1F1F22',
+  success: '#3DD68C',
 };
 
 export const shadows = {
@@ -156,9 +154,9 @@ export const shadows = {
   card: {
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0,
+    shadowOpacity: 0.05,
     shadowRadius: 3,
-    elevation: 0,
+    elevation: 1,
   },
   // Sheets, dialogs — things that float above the whole screen.
   raised: {

@@ -8,24 +8,20 @@ import { Platform } from 'react-native';
 
 import { classifyItem } from '@/lib/classifyItem';
 import { supabase } from '@/lib/supabase';
-import type { Item, ItemSource, ItemType } from '@/types/item';
+import type { AccountSlug, Item, ItemSource, ItemType, TaskPriority, TransactionDirection } from '@/types/item';
 
 export async function fetchItems(userId: string): Promise<Item[]> {
-  // PostgREST caps a response at 1,000 rows by default. Fetch every page
-  // so older captures and account balances never silently disappear.
-  const items: Item[] = [];
-  const pageSize = 500;
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase.from('items').select('*')
-      .eq('user_id', userId)
-      .order('occurred_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(offset, offset + pageSize - 1);
-    if (error) throw error;
-    const page = (data ?? []) as Item[];
-    items.push(...page);
-    if (page.length < pageSize) return items;
+  const { data, error } = await supabase
+    .from('items')
+    .select('*')
+    .eq('user_id', userId)
+    .order('occurred_at', { ascending: false });
+
+  if (error) {
+    throw error;
   }
+
+  return (data ?? []) as Item[];
 }
 
 export async function createItem(
@@ -34,7 +30,6 @@ export async function createItem(
   source: ItemSource = Platform.OS === 'web' ? 'web' : 'manual',
 ): Promise<Item> {
   const trimmed = content.trim();
-  if (!trimmed) throw new Error('Content cannot be empty');
   const classified = classifyItem(trimmed);
   const now = new Date().toISOString();
 
@@ -82,14 +77,26 @@ export async function updateItem(
 ): Promise<Item> {
   const payload: Record<string, unknown> = { ...updates };
 
-  // Classification is a capture-time suggestion. Text edits must preserve
-  // manual type, due-date, priority, and amount choices.
-  if (updates.content !== undefined) {
-    payload.content = updates.content.trim();
-    if (!payload.content) throw new Error('Content cannot be empty');
-  }
-  if (updates.amount != null && (!Number.isFinite(updates.amount) || updates.amount <= 0)) {
-    throw new Error('Enter a valid positive amount');
+  if (updates.content !== undefined && updates.type === undefined) {
+    const classified = classifyItem(updates.content);
+    payload.type = classified.type;
+    payload.amount = classified.amount;
+    payload.priority = classified.priority ?? updates.priority ?? null;
+    payload.due_at = classified.due_at ?? updates.due_at ?? null;
+
+    if (classified.type === 'expense') {
+      payload.account = updates.account ?? classified.account ?? 'cash';
+      payload.direction = updates.direction ?? classified.direction ?? 'out';
+    } else {
+      payload.account = null;
+      payload.direction = null;
+      payload.amount = null;
+    }
+
+    if (classified.type !== 'task') {
+      payload.priority = null;
+      payload.due_at = null;
+    }
   }
 
   if (updates.type === 'expense' && payload.account == null) {
@@ -101,12 +108,10 @@ export async function updateItem(
   if (updates.type && updates.type !== 'expense') {
     payload.account = null;
     payload.direction = null;
-    payload.amount = null;
   }
   if (updates.type && updates.type !== 'task') {
     payload.priority = null;
     payload.due_at = null;
-    payload.done = false;
   }
 
   const { data, error } = await supabase
@@ -156,11 +161,10 @@ export function setItemType(
   id: string,
   type: ItemType,
   current: Pick<Item, 'content' | 'amount' | 'account' | 'direction' | 'priority' | 'due_at'>,
-  save: typeof updateItem = updateItem,
 ): Promise<Item> {
   if (type === 'expense') {
     const classified = classifyItem(current.content);
-    return save(id, {
+    return updateItem(id, {
       type,
       amount: classified.amount ?? current.amount ?? null,
       account: current.account ?? classified.account ?? 'cash',
@@ -172,7 +176,7 @@ export function setItemType(
 
   if (type === 'task') {
     const classified = classifyItem(current.content);
-    return save(id, {
+    return updateItem(id, {
       type,
       amount: null,
       account: null,
@@ -182,7 +186,7 @@ export function setItemType(
     });
   }
 
-  return save(id, {
+  return updateItem(id, {
     type,
     amount: null,
     account: null,

@@ -1,14 +1,13 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text, useColorScheme } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
-import { radii, spacing, typography, useThemeColors } from '@/constants/ui';
+import { getTypeColor, radii, spacing, typography, useThemeColors } from '@/constants/ui';
 import { itemTypeLabel } from '@/lib/classifyItem';
 import type { ItemType } from '@/types/item';
 
 export type InboxFilter = 'all' | ItemType;
 
-const FILTERS: InboxFilter[] = ['all', 'link', 'task', 'expense', 'contact', 'quote', 'note', 'unsorted'];
+const FILTERS: InboxFilter[] = ['all', 'link', 'task', 'expense', 'contact', 'quote', 'note'];
 
 interface FilterBarProps {
   active: InboxFilter;
@@ -29,22 +28,20 @@ export function FilterBar({ active, counts, onChange }: FilterBarProps) {
         const selected = active === filter;
         const label = filter === 'all' ? 'All' : itemTypeLabel(filter);
         const count = counts[filter];
-        const accent = theme.accent;
+        const accent = filter === 'all' ? theme.accent : getTypeColor(filter);
 
         return (
           <PressableScale
             key={filter}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
             onPress={() => onChange(filter)}
             scaleTo={0.95}
             style={[
               styles.chip,
               {
-                backgroundColor: selected ? theme.accentMuted : 'transparent',
+                backgroundColor: selected ? accent : theme.inputBackground,
               },
             ]}>
-            <Text style={[styles.chipText, { color: selected ? accent : theme.textMuted }]}>
+            <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : theme.text }]}>
               {label}
               {count > 0 ? ` · ${count}` : ''}
             </Text>
@@ -61,10 +58,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   chip: {
-    borderRadius: radii.sm,
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm + 2,
   },
   chipText: {

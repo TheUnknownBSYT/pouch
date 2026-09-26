@@ -1,4 +1,3 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
 /**
  * RichContent — renders item text with only URL portions styled as tappable links.
  *
@@ -11,6 +10,7 @@ import {
   Text,
   type StyleProp,
   type TextStyle,
+  useColorScheme,
 } from 'react-native';
 
 import { useThemeColors } from '@/constants/ui';
@@ -43,8 +43,7 @@ export function RichContent({ content, style, numberOfLines, muted }: RichConten
           <Text
             key={`l-${index}`}
             style={[styles.link, { color: theme.accent }]}
-            accessibilityRole="link"
-            onPress={(event) => { event.stopPropagation(); void openLink(segment.url); }}
+            onPress={() => void openLink(segment.url)}
             suppressHighlighting={false}>
             {segment.value}
           </Text>
@@ -71,8 +70,7 @@ export function RichContentDetail({ content, style }: RichContentProps) {
           <Text
             key={`l-${index}`}
             style={[styles.link, styles.detailLink, { color: theme.accent }]}
-            accessibilityRole="link"
-            onPress={(event) => { event.stopPropagation(); void openLink(segment.url); }}>
+            onPress={() => void openLink(segment.url)}>
             {segment.value}
           </Text>
         );

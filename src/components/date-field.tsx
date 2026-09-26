@@ -1,7 +1,6 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { radii, shadows, spacing, useThemeColors } from '@/constants/ui';
@@ -73,7 +72,6 @@ export function DateField({ label, value, onChange }: DateFieldProps) {
           </PressableScale>
           {open ? (
             <DateTimePicker
-              themeVariant={colorScheme}
               mode="date"
               value={value}
               onChange={handleChange}

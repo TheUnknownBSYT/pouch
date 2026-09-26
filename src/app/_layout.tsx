@@ -1,8 +1,6 @@
-import { SettingsProvider, useColorScheme } from '@/contexts/SettingsContext';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ItemsProvider } from '@/contexts/ItemsContext';
@@ -13,7 +11,7 @@ import { useThemeColors } from '@/constants/ui';
 function RootNavigator() {
   const colorScheme = useColorScheme();
   const theme = useThemeColors(colorScheme === 'dark');
-  const { loading, user } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) {
     return (
@@ -25,18 +23,16 @@ function RootNavigator() {
 
   return (
     <AuthGate>
-      <ItemsProvider key={user?.id ?? 'signed-out'}>
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <ItemsProvider>
         <ShareCapture />
         <Stack
           screenOptions={{
-            headerStyle: { backgroundColor: theme.background },
+            headerStyle: { backgroundColor: theme.surface },
             headerTintColor: theme.text,
             headerShadowVisible: false,
             contentStyle: { backgroundColor: theme.background },
           }}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="settings" options={{ title: 'Settings' }} />
           <Stack.Screen name="accounts" options={{ title: 'Accounts' }} />
           <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="item/[id]" options={{ title: 'Item' }} />
@@ -48,13 +44,11 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <SettingsProvider>
     <ShareIntentProvider>
       <AuthProvider>
         <RootNavigator />
       </AuthProvider>
     </ShareIntentProvider>
-    </SettingsProvider>
   );
 }
 

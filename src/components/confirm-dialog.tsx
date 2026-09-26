@@ -1,6 +1,5 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
 import { useEffect } from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,

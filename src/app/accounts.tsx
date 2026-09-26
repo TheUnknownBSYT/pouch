@@ -1,8 +1,7 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { useItems } from '@/contexts/ItemsContext';
@@ -78,9 +77,7 @@ export default function AccountsScreen() {
       <ScrollView
         contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}
         keyboardShouldPersistTaps="handled">
-        <Text style={[typography.display, { color: theme.text }]}>Accounts</Text>
-        <Text style={[typography.bodySmall, { color: theme.textMuted }]}>A clear view of what came and went.</Text>
-        <Text style={[typography.label, { color: theme.textMuted }]}>All-time balance</Text>
+        <Text style={[styles.heading, { color: theme.text }]}>Balances</Text>
         <View style={styles.balanceGrid}>
           {balances.map((account) => (
             <View key={account.slug} style={[styles.balanceCard, shadows.card, { backgroundColor: theme.surface }]}>
@@ -99,8 +96,6 @@ export default function AccountsScreen() {
         <View style={[styles.monthCard, shadows.card, { backgroundColor: theme.surface }]}>
           <View style={styles.monthHeader}>
             <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="Change month"
               scaleTo={0.9}
               onPress={() => {
                 const prev = shiftMonth(year, month, -1);
@@ -112,8 +107,6 @@ export default function AccountsScreen() {
             </PressableScale>
             <Text style={[styles.monthTitle, { color: theme.text }]}>{monthLabel(year, month)}</Text>
             <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="Change month"
               scaleTo={0.9}
               onPress={() => {
                 const next = shiftMonth(year, month, 1);
@@ -149,11 +142,11 @@ export default function AccountsScreen() {
               },
             ]}>
             {exporting ? (
-              <ActivityIndicator color={theme.onAccent} />
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
-                <Ionicons color={theme.onAccent} name="download-outline" size={17} />
-                <Text style={[styles.exportButtonText, { color: theme.onAccent }]}>Export CSV</Text>
+                <Ionicons color="#FFFFFF" name="download-outline" size={17} />
+                <Text style={styles.exportButtonText}>Export CSV</Text>
               </>
             )}
           </PressableScale>
@@ -211,18 +204,15 @@ export default function AccountsScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    maxWidth: 760,
-    alignSelf: 'center',
     gap: spacing.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
     paddingBottom: spacing.xxl,
   },
   heading: {
     ...typography.title,
   },
   balanceGrid: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     gap: spacing.md,
   },
   balanceCard: {
@@ -256,9 +246,9 @@ const styles = StyleSheet.create({
   monthButton: {
     alignItems: 'center',
     borderRadius: radii.full,
-    height: 44,
+    height: 34,
     justifyContent: 'center',
-    width: 44,
+    width: 34,
   },
   monthTitle: {
     fontSize: 16,

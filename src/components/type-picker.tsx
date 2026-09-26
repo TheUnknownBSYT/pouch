@@ -1,5 +1,4 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { radii, spacing, useThemeColors } from '@/constants/ui';
@@ -24,15 +23,13 @@ export function TypePicker({ value, onChange }: TypePickerProps) {
         return (
           <PressableScale
             key={type}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
             scaleTo={0.95}
             onPress={() => onChange(type)}
             style={[
               styles.chip,
               { backgroundColor: selected ? theme.accent : theme.inputBackground },
             ]}>
-            <Text style={[styles.chipText, { color: selected ? theme.onAccent : theme.text }]}>
+            <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : theme.text }]}>
               {itemTypeLabel(type)}
             </Text>
           </PressableScale>
@@ -49,9 +46,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    borderRadius: radii.sm,
-    minHeight: 44,
-    justifyContent: 'center',
+    borderRadius: radii.full,
     paddingHorizontal: spacing.md + 2,
     paddingVertical: spacing.sm + 2,
   },

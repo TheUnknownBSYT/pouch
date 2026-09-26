@@ -30,13 +30,13 @@ const EXPENSE_OUT_PATTERN =
   /\b(spent|paid|bought|purchase|purchased|cost|expense|lost|charged|charge|debit|withdraw|withdrew|ordered)\b/i;
 
 const EXPENSE_AMOUNT_PATTERNS = [
-  // Prefer explicit currency/price over quantities: "bought 2 coffees for ₹300".
-  /(?:₹|\brs\.?\s*|\binr\s*)([\d,]+(?:\.\d{1,2})?)/i,
-  /\b([\d,]+(?:\.\d{1,2})?)\s*(?:₹|rs\.?\b|inr\b)/i,
-  /(?:\bfor\b|\bat\b|@)\s+([\d,]+(?:\.\d{1,2})?)\b/i,
-  /\b(?:spent|paid|bought|buy|purchase|cost|got|received|earned|made|lost|charged|charge|ordered)\s+([\d,]+(?:\.\d{1,2})?)/i,
+  /\b(?:spent|paid|bought|buy|purchase|cost|got|received|earned|made|lost|charged|charge|ordered)\s+(?:rs\.?\s*|inr\s*|₹\s*)?([\d,]+(?:\.\d{1,2})?)/i,
+  /\b([\d,]+(?:\.\d{1,2})?)\s+(?:rs\.?|inr|₹)\b/i,
   /\b([\d,]+(?:\.\d{1,2})?)\s+on\b/i,
   /\b([\d,]+(?:\.\d{1,2})?)\s+for\b/i,
+  /(?:₹|rs\.?\s*|inr\s*)([\d,]+(?:\.\d{1,2})?)/i,
+  /\b([\d,]+(?:\.\d{1,2})?)\s*(?:₹|rs\.?|inr)\b/i,
+  /\b(?:for|at|@)\s+([\d,]+(?:\.\d{1,2})?)\b/i,
 ];
 
 const GPAY_PATTERN = /\b(gpay|google pay|upi|phonepe|paytm|pay to)\b/i;
@@ -49,8 +49,8 @@ const TASK_PATTERNS = [
   /^(call|buy|send|email|text|pick up|pickup|book|schedule|finish|complete|remind|check|fix|update|write|read|watch|listen|meet|go to|get|make|do|try|start|stop|cancel|return|submit|apply|download|install|setup|set up|clean|organize|organise|pack|unpack|move|drop off|dropoff)\b/i,
 ];
 
-const HIGH_PRIORITY_PATTERN = /\b(asap|urgent|critical)\b|!!!|\bimportant!/i;
-const MEDIUM_PRIORITY_PATTERN = /\b(important|priority)\b|!!/i;
+const HIGH_PRIORITY_PATTERN = /\b(asap|urgent|!!!|critical|important!)\b/i;
+const MEDIUM_PRIORITY_PATTERN = /\b(important|!!|priority)\b/i;
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -58,6 +58,10 @@ function parseAmount(raw: string): number | null {
   const normalized = raw.replace(/,/g, '');
   const value = Number.parseFloat(normalized);
   if (!Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  if (Number.isInteger(value) && value >= 1900 && value <= 2100) {
     return null;
   }
 
@@ -124,7 +128,7 @@ export function detectDueDate(content: string, baseDate = new Date()): string | 
   if (inDays?.[1]) {
     const date = startOfDay(baseDate);
     date.setDate(date.getDate() + Number.parseInt(inDays[1], 10));
-    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    return date.toISOString();
   }
 
   const byWeekday = lower.match(/\b(?:by|on|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
@@ -133,7 +137,7 @@ export function detectDueDate(content: string, baseDate = new Date()): string | 
     const date = startOfDay(baseDate);
     const current = date.getDay();
     let delta = target - current;
-    if (delta < 0) {
+    if (delta <= 0) {
       delta += 7;
     }
     date.setDate(date.getDate() + delta);
@@ -148,7 +152,7 @@ export function detectDueDate(content: string, baseDate = new Date()): string | 
       ? Number.parseInt(dueMatch[3].length === 2 ? `20${dueMatch[3]}` : dueMatch[3], 10)
       : baseDate.getFullYear();
     const date = startOfDay(new Date(year, month, day));
-    if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) {
+    if (!Number.isNaN(date.getTime())) {
       return date.toISOString();
     }
   }
@@ -166,10 +170,6 @@ function detectQuote(content: string): boolean {
 }
 
 function detectExpense(content: string): ClassifiedItem | null {
-  const hasCurrency = /₹|\brs\.?\b|\binr\b/i.test(content);
-  if (!hasCurrency && /\b(?:spent|lost)\s+\d+(?:\.\d+)?\s+(?:hours?|minutes?|seconds?|days?)\b/i.test(content)) {
-    return null;
-  }
   const hasExpenseSignal =
     EXPENSE_IN_PATTERN.test(content) ||
     EXPENSE_OUT_PATTERN.test(content) ||
@@ -208,7 +208,7 @@ function detectExpense(content: string): ClassifiedItem | null {
     };
   }
 
-  if (EXPENSE_OUT_PATTERN.test(content) || /\b(refund|refunded|salary|income|credited)\b/i.test(content)) {
+  if (EXPENSE_OUT_PATTERN.test(content) || EXPENSE_IN_PATTERN.test(content)) {
     return {
       type: 'expense',
       amount: null,
@@ -236,11 +236,6 @@ export function classifyItem(content: string): ClassifiedItem {
 
   if (URL_PATTERN.test(trimmed)) {
     return { type: 'link', amount: null };
-  }
-
-  // An explicit reminder is an intention, even when it mentions a price.
-  if (/^(?:todo\b|to-do\b|need to\b|remember to\b|remind me to\b|don['’]?t forget to\b|buy\b|pay\b)/i.test(trimmed)) {
-    return { type: 'task', amount: null, priority: detectPriority(trimmed), due_at: detectDueDate(trimmed) };
   }
 
   const expense = detectExpense(trimmed);

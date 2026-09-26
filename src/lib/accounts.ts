@@ -23,9 +23,9 @@ export interface MonthlyExportRow {
 function isExpenseItem(item: Item): item is Item & { amount: number; account: AccountSlug; direction: TransactionDirection } {
   return (
     item.type === 'expense' &&
-    item.amount != null && Number.isFinite(item.amount) && item.amount > 0 &&
-    (item.account === 'cash' || item.account === 'gpay') &&
-    (item.direction === 'in' || item.direction === 'out')
+    item.amount != null &&
+    item.account != null &&
+    item.direction != null
   );
 }
 
@@ -42,20 +42,20 @@ export function computeAccountBalances(items: Item[]): AccountBalance[] {
 
     const bucket = totals[item.account];
     if (item.direction === 'in') {
-      bucket.balance += Math.round(item.amount * 100);
-      bucket.income += Math.round(item.amount * 100);
+      bucket.balance += item.amount;
+      bucket.income += item.amount;
     } else {
-      bucket.balance -= Math.round(item.amount * 100);
-      bucket.expense += Math.round(item.amount * 100);
+      bucket.balance -= item.amount;
+      bucket.expense += item.amount;
     }
   }
 
   return (Object.keys(totals) as AccountSlug[]).map((slug) => ({
     slug,
     label: ACCOUNT_LABELS[slug],
-    balance: totals[slug].balance / 100,
-    income: totals[slug].income / 100,
-    expense: totals[slug].expense / 100,
+    balance: totals[slug].balance,
+    income: totals[slug].income,
+    expense: totals[slug].expense,
   }));
 }
 
@@ -69,28 +69,26 @@ export function filterExpensesForMonth(items: Item[], year: number, month: numbe
     .sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
 }
 
-export function buildMonthlyExportRows(items: Item[], account: AccountSlug, openingBalance = 0): MonthlyExportRow[] {
+export function buildMonthlyExportRows(items: Item[], account: AccountSlug): MonthlyExportRow[] {
   const chronological = items
     .filter(isExpenseItem)
     .filter((item) => item.account === account)
     .sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
 
-  let runningPaise = Math.round(openingBalance * 100);
+  let runningBalance = 0;
 
   return chronological.map((item) => {
-    const signedPaise = Math.round(item.amount * 100) * (item.direction === 'in' ? 1 : -1);
-    const signedAmount = signedPaise / 100;
-    runningPaise += signedPaise;
-    const date = new Date(item.occurred_at);
+    const signedAmount = item.direction === 'in' ? item.amount : -item.amount;
+    runningBalance += signedAmount;
 
     return {
-      date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+      date: new Date(item.occurred_at).toISOString().slice(0, 10),
       account: ACCOUNT_LABELS[account],
       description: item.content.replace(/\s+/g, ' ').trim(),
       direction: item.direction,
       amount: item.amount,
       signedAmount,
-      runningBalance: runningPaise / 100,
+      runningBalance,
     };
   });
 }
@@ -99,10 +97,8 @@ export function buildMonthlyCsv(items: Item[], year: number, month: number): str
   const monthItems = filterExpensesForMonth(items, year, month);
   const lines = ['Date,Account,Description,In,Out,Net,Running Balance'];
 
-  const monthStart = new Date(year, month - 1, 1).getTime();
-  const openingBalances = computeAccountBalances(items.filter((item) => Date.parse(item.occurred_at) < monthStart));
   for (const account of ['cash', 'gpay'] as AccountSlug[]) {
-    const rows = buildMonthlyExportRows(monthItems, account, openingBalances.find((row) => row.slug === account)?.balance ?? 0);
+    const rows = buildMonthlyExportRows(monthItems, account);
     for (const row of rows) {
       const inAmount = row.direction === 'in' ? formatAmount(row.amount) : '';
       const outAmount = row.direction === 'out' ? formatAmount(row.amount) : '';
@@ -110,7 +106,7 @@ export function buildMonthlyCsv(items: Item[], year: number, month: number): str
         [
           row.date,
           row.account,
-          csvText(row.description),
+          `"${row.description.replace(/"/g, '""')}"`,
           inAmount,
           outAmount,
           formatAmount(row.signedAmount),
@@ -128,10 +124,4 @@ export function monthLabel(year: number, month: number): string {
     month: 'long',
     year: 'numeric',
   });
-}
-
-// Quoting alone does not prevent spreadsheet formula execution.
-function csvText(value: string): string {
-  const safe = /^[=+@\-\t\r]/.test(value) ? `'${value}` : value;
-  return `"${safe.replace(/"/g, '""')}"`;
 }

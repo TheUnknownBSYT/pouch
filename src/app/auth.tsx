@@ -1,70 +1,76 @@
-import { useColorScheme } from '@/contexts/SettingsContext';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PouchBrand } from '@/components/brand';
 import { PressableScale } from '@/components/pressable-scale';
 import { useAuth } from '@/contexts/AuthContext';
-import { radii, spacing, typography, useThemeColors } from '@/constants/ui';
+import { radii, shadows, spacing, typography, useThemeColors } from '@/constants/ui';
 
 export default function AuthScreen() {
-  const { lastEmail, sendSignInLink, authError } = useAuth();
+  const { lastEmail, sendEmailCode, verifyEmailCode } = useAuth();
   const colorScheme = useColorScheme();
   const theme = useThemeColors(colorScheme === 'dark');
 
-  const [emailInput, setEmail] = useState<string | null>(null);
-  const email = emailInput ?? lastEmail ?? '';
-  const sendLock = useRef(false);
-  const [cooldown, setCooldown] = useState(0);
-  useEffect(() => {
-    if (!cooldown) return;
-    const timer = setTimeout(() => setCooldown(value => Math.max(0, value - 1)), 1000);
-    return () => clearTimeout(timer);
-  }, [cooldown]);
-  const [step, setStep] = useState<'email' | 'sent'>('email');
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [emailFocused, setEmailFocused] = useState(false);
+  const [codeFocused, setCodeFocused] = useState(false);
 
-  const handleSendLink = async () => {
-    if (sendLock.current || cooldown > 0) return;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Enter a valid email address');
+  useEffect(() => {
+    if (lastEmail) {
+      setEmail(lastEmail);
+    }
+  }, [lastEmail]);
+
+  const handleSendCode = async () => {
+    if (!email.trim()) {
+      setError('Enter your email');
       return;
     }
 
-    sendLock.current = true;
     setSubmitting(true);
     setError(null);
     setMessage(null);
 
-    try {
-      const { error: sendError } = await sendSignInLink(email);
+    const { error: sendError } = await sendEmailCode(email);
+    setSubmitting(false);
 
-      if (sendError) {
-        setError(sendError);
-        return;
-      }
+    if (sendError) {
+      setError(sendError);
+      return;
+    }
 
-      setStep('sent');
-      setCooldown(60);
-      setMessage('Open the link in your email to sign in. No code to enter.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send link. Try again.');
-    } finally {
-      sendLock.current = false;
-      setSubmitting(false);
+    setStep('code');
+    setMessage('Enter the 6-digit code from your email. You stay signed in after this.');
+  };
+
+  const handleVerifyCode = async () => {
+    if (!code.trim()) {
+      setError('Enter the code from your email');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const { error: verifyError } = await verifyEmailCode(email, code);
+    setSubmitting(false);
+
+    if (verifyError) {
+      setError(verifyError);
     }
   };
 
@@ -73,16 +79,17 @@ export default function AuthScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.inner}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <PouchBrand />
         <View style={styles.hero}>
-          <Text style={[styles.title, { color: theme.text }]}>{step === 'email' ? 'In. And on\nwith your day.' : 'Check your inbox.'}</Text>
+          <View style={[styles.logo, shadows.raised, { backgroundColor: theme.accent }]}>
+            <Text style={styles.logoText}>B</Text>
+          </View>
+          <Text style={[styles.title, { color: theme.text }]}>Pouch</Text>
           <Text style={[styles.subtitle, { color: theme.textMuted }]}>
-            {step === 'email' ? 'Links, notes, tasks. Drop them here.\nFind them when you need them.' : `We sent a sign-in link to ${email}.`}
+            Capture in 2 seconds. Find in 5. Sign in once — we remember you.
           </Text>
         </View>
 
-        <View style={styles.card}>
+        <View style={[styles.card, shadows.card, { backgroundColor: theme.surface }]}>
           <View
             style={[
               styles.inputWrap,
@@ -92,7 +99,6 @@ export default function AuthScreen() {
               },
             ]}>
             <TextInput
-              accessibilityLabel="Email address"
               autoCapitalize="none"
               autoComplete="email"
               autoCorrect={false}
@@ -105,30 +111,55 @@ export default function AuthScreen() {
               onChangeText={setEmail}
               onFocus={() => setEmailFocused(true)}
               onBlur={() => setEmailFocused(false)}
-              onSubmitEditing={() => void handleSendLink()}
+              onSubmitEditing={() => void handleSendCode()}
               returnKeyType="next"
             />
           </View>
 
+          {step === 'code' ? (
+            <View
+              style={[
+                styles.inputWrap,
+                {
+                  backgroundColor: theme.inputBackground,
+                  borderColor: codeFocused ? theme.accent : 'transparent',
+                },
+              ]}>
+              <TextInput
+                autoComplete="one-time-code"
+                keyboardType="number-pad"
+                maxLength={8}
+                placeholder="6-digit code"
+                placeholderTextColor={theme.textFaint}
+                style={[styles.input, styles.codeInput, { color: theme.text }]}
+                value={code}
+                onChangeText={setCode}
+                onFocus={() => setCodeFocused(true)}
+                onBlur={() => setCodeFocused(false)}
+                onSubmitEditing={() => void handleVerifyCode()}
+                returnKeyType="done"
+              />
+            </View>
+          ) : null}
+
           <PressableScale
-            accessibilityRole="button"
-            accessibilityState={{ disabled: submitting || cooldown > 0, busy: submitting }}
-            disabled={submitting || cooldown > 0}
-            onPress={() => void handleSendLink()}
-            style={[styles.button, { backgroundColor: theme.accent, opacity: submitting || cooldown > 0 ? 0.6 : 1 }]}>
+            disabled={submitting}
+            onPress={() => void (step === 'email' ? handleSendCode() : handleVerifyCode())}
+            style={[styles.button, { backgroundColor: theme.accent, opacity: submitting ? 0.85 : 1 }]}>
             {submitting ? (
-              <ActivityIndicator color={theme.onAccent} />
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={[styles.buttonText, { color: theme.onAccent }]}>{cooldown > 0 ? `Resend in ${cooldown}s` : step === 'email' ? 'Send sign-in link' : 'Resend sign-in link'}</Text>
+              <Text style={styles.buttonText}>{step === 'email' ? 'Send code' : 'Verify & sign in'}</Text>
             )}
           </PressableScale>
 
-          {step === 'sent' ? (
+          {step === 'code' ? (
             <PressableScale
               disabled={submitting}
               scaleTo={0.96}
               onPress={() => {
                 setStep('email');
+                setCode('');
                 setError(null);
                 setMessage(null);
               }}>
@@ -137,10 +168,8 @@ export default function AuthScreen() {
           ) : null}
         </View>
 
-        {step === 'email' ? <Text style={[styles.helper, { color: theme.textMuted }]}>We’ll email you a sign-in link.{'\n'}No password to remember.</Text> : null}
         {message ? <Text style={[styles.message, { color: theme.accent }]}>{message}</Text> : null}
-        {error || authError ? <Text accessibilityRole="alert" style={[styles.error, { color: theme.danger }]}>{error ?? authError}</Text> : null}
-        </ScrollView>
+        {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -152,32 +181,40 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    gap: spacing.xl,
   },
-  scroll: { padding: spacing.xl, gap: 20, flexGrow: 1 },
-  helper: { fontSize: 13, lineHeight: 20 },
   hero: {
-    marginTop: 64,
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.xs,
   },
+  logo: {
+    alignItems: 'center',
+    borderRadius: radii.xl,
+    height: 64,
+    justifyContent: 'center',
+    width: 64,
+  },
+  logoText: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '800',
+  },
   title: {
     ...typography.display,
-    fontSize: 36,
-    lineHeight: 46,
-    letterSpacing: -1.2,
+    fontSize: 32,
   },
   subtitle: {
     ...typography.body,
     lineHeight: 24,
-    textAlign: 'left',
+    textAlign: 'center',
   },
   card: {
     borderRadius: radii.xxl,
     gap: spacing.md,
+    padding: spacing.xl,
   },
   inputWrap: {
     borderRadius: radii.lg,

@@ -16,7 +16,6 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  useReducedMotion,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -32,7 +31,6 @@ interface PressableScaleProps extends PressableProps {
 export const PressableScale = forwardRef<View, PressableScaleProps>(
   ({ scaleTo = 0.97, style, onPressIn, onPressOut, disabled, ...props }, ref) => {
     const scale = useSharedValue(1);
-    const reduceMotion = useReducedMotion();
 
     const animatedStyle = useAnimatedStyle(() => ({
       transform: [{ scale: scale.value }],
@@ -44,7 +42,7 @@ export const PressableScale = forwardRef<View, PressableScaleProps>(
         disabled={disabled}
         style={[style, animatedStyle]}
         onPressIn={(event) => {
-          scale.value = withTiming(reduceMotion ? 1 : scaleTo, { duration: 120, easing: EASE_OUT });
+          scale.value = withTiming(scaleTo, { duration: 120, easing: EASE_OUT });
           onPressIn?.(event);
         }}
         onPressOut={(event) => {
