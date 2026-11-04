@@ -1,9 +1,11 @@
 import { ShareIntentProvider } from 'expo-share-intent';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Stack } from 'expo-router';
-import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, useColorScheme, View } from 'react-native';
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ItemsProvider } from '@/contexts/ItemsContext';
+import { SpaceProvider } from '@/contexts/SpaceContext';
 import { AuthGate } from '@/components/auth-gate';
 import { ShareCapture } from '@/components/share-capture';
 import { useThemeColors } from '@/constants/ui';
@@ -11,7 +13,7 @@ import { useThemeColors } from '@/constants/ui';
 function RootNavigator() {
   const colorScheme = useColorScheme();
   const theme = useThemeColors(colorScheme === 'dark');
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
 
   if (loading) {
     return (
@@ -23,8 +25,7 @@ function RootNavigator() {
 
   return (
     <AuthGate>
-      <ItemsProvider>
-        <ShareCapture />
+      <ItemsProvider key={user?.id ?? 'signed-out'}>
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: theme.surface },
@@ -34,9 +35,12 @@ function RootNavigator() {
           }}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="accounts" options={{ title: 'Accounts' }} />
+          <Stack.Screen name="space" options={{ title: 'Your space' }} />
+          <Stack.Screen name="whatsapp" options={{ title: 'WhatsApp to Pouch' }} />
           <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="item/[id]" options={{ title: 'Item' }} />
         </Stack>
+        <ShareCapture />
       </ItemsProvider>
     </AuthGate>
   );
@@ -44,12 +48,20 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <ShareIntentProvider>
+    <ShareIntentProvider options={{
+      disabled: Platform.OS === 'web' || Constants.executionEnvironment === ExecutionEnvironment.StoreClient,
+      resetOnBackground: false,
+    }}>
       <AuthProvider>
-        <RootNavigator />
+        <PersonalizedNavigator />
       </AuthProvider>
     </ShareIntentProvider>
   );
+}
+
+function PersonalizedNavigator() {
+  const { user } = useAuth();
+  return <SpaceProvider key={user?.id ?? 'guest'}><RootNavigator /></SpaceProvider>;
 }
 
 const styles = StyleSheet.create({

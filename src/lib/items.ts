@@ -8,20 +8,43 @@ import { Platform } from 'react-native';
 
 import { classifyItem } from '@/lib/classifyItem';
 import { supabase } from '@/lib/supabase';
-import type { AccountSlug, Item, ItemSource, ItemType, TaskPriority, TransactionDirection } from '@/types/item';
+import type { Item, ItemSource, ItemType } from '@/types/item';
+
+/** Retried captures never overwrite an existing item or create a second copy. */
+export async function syncCapture(item: Item): Promise<Item> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const { error } = await supabase.from('items')
+      .upsert(item, { onConflict: 'id', ignoreDuplicates: true })
+      .abortSignal(controller.signal);
+    if (error) throw error;
+    const { data, error: readError } = await supabase.from('items').select('*')
+      .eq('id', item.id).eq('user_id', item.user_id).abortSignal(controller.signal).single();
+    if (readError) throw readError;
+    return data as Item;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function fetchItems(userId: string): Promise<Item[]> {
-  const { data, error } = await supabase
-    .from('items')
-    .select('*')
-    .eq('user_id', userId)
-    .order('occurred_at', { ascending: false });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const { data, error } = await supabase
+      .from('items')
+      .select('*')
+      .eq('user_id', userId)
+      .order('occurred_at', { ascending: false })
+      .abortSignal(controller.signal);
 
-  if (error) {
-    throw error;
+    if (error) throw error;
+
+    return (data ?? []) as Item[];
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return (data ?? []) as Item[];
 }
 
 export async function createItem(
@@ -161,10 +184,11 @@ export function setItemType(
   id: string,
   type: ItemType,
   current: Pick<Item, 'content' | 'amount' | 'account' | 'direction' | 'priority' | 'due_at'>,
+  save: typeof updateItem = updateItem,
 ): Promise<Item> {
   if (type === 'expense') {
     const classified = classifyItem(current.content);
-    return updateItem(id, {
+    return save(id, {
       type,
       amount: classified.amount ?? current.amount ?? null,
       account: current.account ?? classified.account ?? 'cash',
@@ -176,7 +200,7 @@ export function setItemType(
 
   if (type === 'task') {
     const classified = classifyItem(current.content);
-    return updateItem(id, {
+    return save(id, {
       type,
       amount: null,
       account: null,
@@ -186,7 +210,7 @@ export function setItemType(
     });
   }
 
-  return updateItem(id, {
+  return save(id, {
     type,
     amount: null,
     account: null,

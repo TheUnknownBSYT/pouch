@@ -5,7 +5,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -20,10 +20,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PouchBrand } from '@/components/brand';
 import { FilterBar, type InboxFilter } from '@/components/filter-bar';
+import { TypePicker } from '@/components/type-picker';
 import { PressableScale } from '@/components/pressable-scale';
 import { RichContent } from '@/components/rich-content';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSpace } from '@/contexts/SpaceContext';
 import {
   getItemIcon,
   getPriorityColor,
@@ -36,7 +39,9 @@ import {
   typography,
   useThemeColors,
 } from '@/constants/ui';
-import { formatDueDate, formatSignedAmount } from '@/lib/classifyItem';
+import { formatDueDate, formatSignedAmount, itemTypeLabel } from '@/lib/classifyItem';
+import { classifyCapture, MAX_CAPTURE_LENGTH } from '@/lib/capture';
+import { useCaptureDraft } from '@/hooks/useCaptureDraft';
 import { callPhone, openWhatsApp } from '@/lib/contacts';
 import { formatRelativeTime } from '@/lib/formatRelativeTime';
 import { openLink, extractFirstUrl } from '@/lib/urls';
@@ -64,16 +69,19 @@ function ItemRow({
   item,
   onOpen,
   onToggleDone,
+  pending,
 }: {
   item: Item;
   onOpen: () => void;
   onToggleDone: (item: Item) => void;
+  pending: boolean;
 }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = useThemeColors(isDark);
   const linkUrl = item.type === 'link' ? extractFirstUrl(item.content) : null;
   const typeColor = getTypeColor(item.type);
+  const { space } = useSpace();
 
   return (
     <PressableScale
@@ -83,16 +91,21 @@ function ItemRow({
         styles.row,
         shadows.card,
         {
-          backgroundColor: theme.surface,
+          backgroundColor: theme.background,
           borderColor: theme.border,
-          borderLeftColor: typeColor,
+
+          paddingVertical: space?.premium && space.compact ? spacing.sm : spacing.lg,
         },
       ]}>
       {item.type === 'task' ? (
         <PressableScale
+          accessibilityRole="checkbox"
+          accessibilityLabel={`Complete ${item.content}`}
+          accessibilityState={{ checked: item.done, disabled: pending }}
+          disabled={pending}
           hitSlop={12}
           scaleTo={0.85}
-          onPress={() => void onToggleDone(item)}
+          onPress={(event) => { event.stopPropagation(); void onToggleDone(item); }}
           style={styles.leadingAction}>
           <Ionicons
             color={item.done ? theme.success : theme.textFaint}
@@ -115,6 +128,9 @@ function ItemRow({
         />
 
         <View style={styles.metaRow}>
+          <Text style={[typography.rowMeta, { color: pending ? theme.accent : typeColor }]}>
+            {pending ? 'Waiting to sync' : itemTypeLabel(item.type)}
+          </Text>
           <Text style={[typography.rowMeta, typography.numeric, { color: theme.textFaint }]}>
             {formatRelativeTime(item.occurred_at ?? item.created_at)}
           </Text>
@@ -152,7 +168,9 @@ function ItemRow({
       {linkUrl ? (
         <PressableScale
           hitSlop={8}
-          onPress={() => void openLink(linkUrl)}
+          accessibilityRole="button"
+          accessibilityLabel="Open saved link"
+          onPress={(event) => { event.stopPropagation(); void openLink(linkUrl); }}
           style={[styles.actionButton, { backgroundColor: theme.inputBackground }]}>
           <Ionicons color={theme.accent} name="open-outline" size={19} />
         </PressableScale>
@@ -162,13 +180,17 @@ function ItemRow({
         <View style={styles.contactActions}>
           <PressableScale
             hitSlop={8}
-            onPress={() => void callPhone(item.content)}
+            accessibilityRole="button"
+            accessibilityLabel="Call saved contact"
+            onPress={(event) => { event.stopPropagation(); void callPhone(item.content); }}
             style={[styles.actionButton, { backgroundColor: theme.inputBackground }]}>
             <Ionicons color={theme.accent} name="call-outline" size={19} />
           </PressableScale>
           <PressableScale
             hitSlop={8}
-            onPress={() => void openWhatsApp(item.content)}
+            accessibilityRole="button"
+            accessibilityLabel="Message saved contact on WhatsApp"
+            onPress={(event) => { event.stopPropagation(); void openWhatsApp(item.content); }}
             style={[styles.actionButton, { backgroundColor: theme.inputBackground }]}>
             <Ionicons color="#25D366" name="logo-whatsapp" size={19} />
           </PressableScale>
@@ -183,18 +205,32 @@ export default function InboxScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const theme = useThemeColors(colorScheme === 'dark');
-  const { user, signOut } = useAuth();
-  const { items, loading, refreshing, error, addItem, pullToRefresh, toggleTaskDone } = useItems();
+  const { user } = useAuth();
+  const { items, pendingIds, loading, refreshing, error, addItem, pullToRefresh, toggleTaskDone } = useItems();
 
-  const [draft, setDraft] = useState('');
+  const { draft: captureDraft, update: updateDraft, ready: draftReady, error: draftError } = useCaptureDraft(user?.id);
+  const draft = captureDraft.text;
+  const setDraft = (text: string) => updateDraft({ ...captureDraft, text });
+  const [showTypes, setShowTypes] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [saved, setSaved] = useState<Item | null>(null);
+  const sending = useRef(false);
+  const input = useRef<TextInput>(null);
+  const classification = useMemo(() => classifyCapture(draft, captureDraft.type), [captureDraft.type, draft]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const completedCount = items.filter((item) => item.type === 'task' && item.done).length;
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(null), 5000);
+    return () => clearTimeout(timer);
+  }, [saved]);
 
   const counts = useMemo(() => {
     const next: Record<InboxFilter, number> = {
-      all: items.length,
+      all: 0,
       link: 0,
       task: 0,
       expense: 0,
@@ -205,49 +241,57 @@ export default function InboxScreen() {
     };
 
     for (const item of items) {
+      if (!showCompleted && item.type === 'task' && item.done) continue;
+      next.all += 1;
       next[item.type] += 1;
     }
 
     return next;
-  }, [items]);
+  }, [items, showCompleted]);
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     return items.filter((item) => {
+      if (!query && !showCompleted && item.type === 'task' && item.done) return false;
       if (filter !== 'all' && item.type !== filter) {
         return false;
       }
 
-      if (query && !item.content.toLowerCase().includes(query)) {
+      if (query && !query.split(/\s+/).every((word) => item.content.toLowerCase().includes(word))) {
         return false;
       }
 
       return true;
     });
-  }, [filter, items, search]);
+  }, [filter, items, search, showCompleted]);
 
   const handleSend = useCallback(async () => {
     const trimmed = draft.trim();
-    if (!trimmed || saving) {
+    if (!trimmed || sending.current || !draftReady) {
       return;
     }
 
+    sending.current = true;
     setSaving(true);
     setSaveError(null);
 
     try {
-      await addItem(trimmed);
-      setDraft('');
+      const item = await addItem(trimmed, undefined, captureDraft.type);
+      updateDraft({ text: '' });
+      setShowTypes(false);
+      setSaved(item);
+      input.current?.focus();
       // One haptic, tied to the causal moment (the item landing), not a
       // decoration on every keystroke.
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save item');
     } finally {
       setSaving(false);
+      sending.current = false;
     }
-  }, [addItem, draft, saving]);
+  }, [addItem, captureDraft.type, draft, draftReady, updateDraft]);
 
   const handleToggleDone = useCallback(
     async (item: Item) => {
@@ -264,8 +308,10 @@ export default function InboxScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.container, { backgroundColor: theme.background }]}>
+      style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
       <FlatList
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         contentContainerStyle={[
           styles.listContent,
           filteredItems.length === 0 ? styles.listEmpty : null,
@@ -292,31 +338,50 @@ export default function InboxScreen() {
                 />
               </View>
               <Text style={[typography.title, { color: theme.text }]}>
-                {search || filter !== 'all' ? 'Nothing matches' : 'Inbox zero'}
+                {search || filter !== 'all' ? 'Nothing matches' : 'A little less to remember'}
               </Text>
               <Text style={[typography.body, { color: theme.textMuted, textAlign: 'center' }]}>
                 {search || filter !== 'all'
                   ? 'Try another filter or search.'
-                  : 'Dump a link, task, expense, contact, or quote below.'}
+                  : 'Text it here. Pouch sorts it for you.'}
               </Text>
+              {!search && filter === 'all' ? (
+                <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+                  {['Call the dentist tomorrow', 'Paid ₹180 for coffee', 'An idea for the weekend'].map((example) => (
+                    <PressableScale disabled={saving} key={example} onPress={() => { setDraft(example); input.current?.focus(); }} style={[styles.example, { backgroundColor: theme.inputBackground }]}>
+                      <Text style={{ color: theme.textMuted }}>{example}</Text>
+                      <Ionicons name="add" size={16} color={theme.accent} />
+                    </PressableScale>
+                  ))}
+                  <Text style={[typography.bodySmall, { color: theme.textMuted, textAlign: 'center' }]}>Try an example, or write your own.</Text>
+                </View>
+              ) : (
+                <PressableScale onPress={() => { setSearch(''); setFilter('all'); }}>
+                  <Text style={{ color: theme.accent, padding: spacing.md }}>Clear search & filters</Text>
+                </PressableScale>
+              )}
             </View>
           )
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <View>
-              <Text style={[typography.display, { color: theme.text }]}>Pouch</Text>
-              {user?.email ? (
+            <View style={styles.headerRow}>
+              <View>
+              <PouchBrand />
                 <Text style={[typography.bodySmall, { color: theme.textFaint }]}>
-                  {user.email}
+                  A little less to keep in your head.
                 </Text>
-              ) : null}
+              </View>
+              <PressableScale accessibilityRole="button" accessibilityLabel="Your space and settings" onPress={() => router.push('/space')} style={[styles.profileButton, { backgroundColor: theme.accentMuted }]}>
+                <Ionicons name="person-outline" size={21} color={theme.accent} />
+              </PressableScale>
             </View>
             <View style={[styles.searchWrap, { backgroundColor: theme.inputBackground }]}>
               <Ionicons name="search" size={17} color={theme.textFaint} style={styles.searchIcon} />
               <TextInput
                 clearButtonMode="while-editing"
-                placeholder="Search…"
+                placeholder="Search your pouch"
+                accessibilityLabel="Search your captures"
                 placeholderTextColor={theme.textFaint}
                 style={[styles.searchInput, { color: theme.text }]}
                 value={search}
@@ -324,9 +389,14 @@ export default function InboxScreen() {
               />
             </View>
             <FilterBar active={filter} counts={counts} onChange={setFilter} />
-            {error || saveError ? (
+            {completedCount > 0 && (filter === 'all' || filter === 'task') ? (
+              <PressableScale accessibilityRole="button" onPress={() => setShowCompleted(!showCompleted)}>
+                <Text style={[typography.bodySmall, { color: theme.textMuted }]}>{showCompleted ? 'Hide' : 'Show'} {completedCount} completed {completedCount === 1 ? 'task' : 'tasks'}</Text>
+              </PressableScale>
+            ) : null}
+            {error || saveError || draftError ? (
               <Text style={[typography.bodySmall, styles.bannerError, { color: theme.danger }]}>
-                {saveError ?? error}
+                {saveError ?? draftError ?? error}
               </Text>
             ) : null}
           </View>
@@ -334,24 +404,50 @@ export default function InboxScreen() {
         renderItem={({ item }) => (
           <ItemRow
             item={item}
+            pending={pendingIds.has(item.id)}
             onOpen={() => router.push(`/item/${item.id}`)}
             onToggleDone={handleToggleDone}
           />
         )}
       />
 
+      <View style={{ backgroundColor: theme.surface }}>
+        {saved ? (
+          <PressableScale accessibilityRole="button" accessibilityLiveRegion="polite" onPress={() => router.push(`/item/${saved.id}`)} style={styles.captureHint}>
+            <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+            <Text style={[typography.bodySmall, { color: theme.textMuted, flex: 1 }]}>Saved as {itemTypeLabel(saved.type).toLowerCase()}{pendingIds.has(saved.id) ? ' · on this device' : ''}</Text>
+            <Text style={{ color: theme.accent, fontWeight: '600' }}>View</Text>
+          </PressableScale>
+        ) : null}
+        {draft.trim() ? (
+          <>
+            <PressableScale accessibilityRole="button" accessibilityLabel="Change detected category" onPress={() => setShowTypes(!showTypes)} style={styles.captureHint}>
+              <Ionicons name={getItemIcon(classification.type)} size={16} color={getTypeColor(classification.type)} />
+              <Text style={[typography.bodySmall, { color: theme.textMuted, flex: 1 }]}>{captureDraft.type ? 'Save as' : 'Looks like a'} {itemTypeLabel(classification.type).toLowerCase()}{classification.due_at ? ` · ${formatDueDate(classification.due_at)}` : ''}</Text>
+              <Text style={{ color: theme.accent }}>Change</Text>
+            </PressableScale>
+            {showTypes ? <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+              <TypePicker value={classification.type} onChange={(type) => { updateDraft({ text: draft, type }); setShowTypes(false); }} />
+              {captureDraft.type ? <PressableScale onPress={() => updateDraft({ text: draft })}><Text style={{ color: theme.accent }}>Use automatic sorting</Text></PressableScale> : null}
+            </View> : null}
+          </>
+        ) : null}
       <View
         style={[
           styles.composer,
-          shadows.raised,
+
           {
-            backgroundColor: theme.surface,
-            paddingBottom: Math.max(insets.bottom, spacing.md),
+            backgroundColor: theme.background,
+            paddingBottom: spacing.md,
           },
         ]}>
         <TextInput
+          ref={input}
+          editable={!saving}
+          maxLength={MAX_CAPTURE_LENGTH}
+          accessibilityLabel="Capture a thought, link, task or expense"
           multiline
-          placeholder="Capture anything…"
+          placeholder="Drop something here…"
           placeholderTextColor={theme.textFaint}
           style={[
             styles.composerInput,
@@ -360,11 +456,13 @@ export default function InboxScreen() {
           value={draft}
           onChangeText={setDraft}
           onSubmitEditing={handleSend}
-          blurOnSubmit={false}
+          submitBehavior="submit"
           returnKeyType="send"
         />
         <PressableScale
-          disabled={!draft.trim() || saving}
+          accessibilityRole="button"
+          accessibilityLabel="Save capture"
+          disabled={!draft.trim() || saving || !draftReady}
           onPress={handleSend}
           style={[
             styles.sendButton,
@@ -374,19 +472,20 @@ export default function InboxScreen() {
             },
           ]}>
           {saving ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={theme.onAccent} />
           ) : (
-            <Ionicons color="#FFFFFF" name="arrow-up" size={22} />
+            <Ionicons color={theme.onAccent} name="arrow-up" size={22} />
           )}
         </PressableScale>
       </View>
+      </View>
 
-      <View style={styles.footerLinks}>
+      <View style={[styles.footerLinks, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
         <PressableScale onPress={() => router.push('/accounts')} scaleTo={0.95}>
           <Text style={[styles.footerLink, { color: theme.accent }]}>Accounts</Text>
         </PressableScale>
-        <PressableScale onPress={signOut} scaleTo={0.95}>
-          <Text style={[styles.footerLink, { color: theme.textFaint }]}>Sign out</Text>
+        <PressableScale onPress={() => router.push('/whatsapp')} scaleTo={0.95}>
+          <Text style={[styles.footerLink, { color: theme.textMuted }]}>Add from WhatsApp</Text>
         </PressableScale>
       </View>
     </KeyboardAvoidingView>
@@ -396,15 +495,17 @@ export default function InboxScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
   },
   listContent: {
-    padding: spacing.lg,
-    gap: spacing.md,
-    paddingBottom: 140,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   listEmpty: {
     flexGrow: 1,
-    justifyContent: 'center',
   },
   header: {
     gap: spacing.md + 2,
@@ -428,6 +529,7 @@ const styles = StyleSheet.create({
     marginTop: 48,
   },
   emptyState: {
+    paddingTop: 64,
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
@@ -445,25 +547,24 @@ const styles = StyleSheet.create({
   },
   row: {
     alignItems: 'center',
-    borderRadius: radii.xl,
-    borderLeftWidth: 3,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.md,
-    padding: spacing.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: 0,
   },
   leadingAction: {
     alignItems: 'center',
-    height: 38,
+    height: 44,
     justifyContent: 'center',
-    width: 38,
+    width: 44,
   },
   iconWrap: {
     alignItems: 'center',
     borderRadius: radii.md,
-    height: 38,
+    height: 44,
     justifyContent: 'center',
-    width: 38,
+    width: 44,
   },
   rowBody: {
     flex: 1,
@@ -487,9 +588,9 @@ const styles = StyleSheet.create({
   actionButton: {
     alignItems: 'center',
     borderRadius: radii.md,
-    height: 38,
+    height: 44,
     justifyContent: 'center',
-    width: 38,
+    width: 44,
   },
   contactActions: {
     flexDirection: 'row',
@@ -497,16 +598,15 @@ const styles = StyleSheet.create({
   },
   composer: {
     alignItems: 'flex-end',
-    borderTopLeftRadius: radii.xxl,
-    borderTopRightRadius: radii.xxl,
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md + 2,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
   },
   composerInput: {
-    borderRadius: radii.xl,
     flex: 1,
+    borderRadius: radii.xl,
     fontSize: 17,
     maxHeight: 140,
     minHeight: 50,
@@ -515,7 +615,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignItems: 'center',
-    borderRadius: radii.full,
+    borderRadius: radii.lg,
     height: 50,
     justifyContent: 'center',
     width: 50,
@@ -529,7 +629,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs + 2,
   },
   footerLink: {
-    fontSize: 14,
+    minHeight: 44,
+    paddingVertical: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  profileButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  captureHint: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  example: { padding: spacing.md, borderRadius: radii.md, flexDirection: 'row', gap: spacing.lg, justifyContent: 'space-between', alignItems: 'center' },
 });

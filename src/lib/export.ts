@@ -24,8 +24,11 @@ export async function downloadCsv(filename: string, csv: string): Promise<void> 
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, {
       mimeType: 'text/csv',
+      UTI: 'public.comma-separated-values-text',
       dialogTitle: 'Export transactions',
     });
+  } else {
+    throw new Error('Sharing is unavailable on this device');
   }
 }
 

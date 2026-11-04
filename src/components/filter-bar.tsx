@@ -24,7 +24,7 @@ export function FilterBar({ active, counts, onChange }: FilterBarProps) {
       horizontal
       contentContainerStyle={styles.container}
       showsHorizontalScrollIndicator={false}>
-      {FILTERS.map((filter) => {
+      {[...FILTERS, ...(counts.unsorted > 0 ? ['unsorted' as const] : [])].map((filter) => {
         const selected = active === filter;
         const label = filter === 'all' ? 'All' : itemTypeLabel(filter);
         const count = counts[filter];
@@ -32,16 +32,18 @@ export function FilterBar({ active, counts, onChange }: FilterBarProps) {
 
         return (
           <PressableScale
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
             key={filter}
             onPress={() => onChange(filter)}
             scaleTo={0.95}
             style={[
               styles.chip,
               {
-                backgroundColor: selected ? accent : theme.inputBackground,
+                backgroundColor: selected ? theme.accentMuted : 'transparent',
               },
             ]}>
-            <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : theme.text }]}>
+            <Text style={[styles.chipText, { color: selected ? accent : theme.textMuted }]}>
               {label}
               {count > 0 ? ` · ${count}` : ''}
             </Text>

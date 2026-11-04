@@ -95,7 +95,7 @@ Run: `npm test`
 | Path                                       | Purpose                                              |
 | ------------------------------------------ | ---------------------------------------------------- |
 | `app.json`                                 | Expo config, share-intent plugin                     |
-| `eas.json`                                 | EAS Build profiles (needs $99 Apple Developer later) |
+| `eas.json`                                 | Development, standalone preview, and production build profiles |
 | `.env`                                     | Supabase keys (not in git)                           |
 | `_support/supabase/*.sql`                  | Database migrations                                  |
 | `_support/scripts/clear-apple-keychain.js` | Fixes wrong Apple password during EAS setup          |
@@ -148,21 +148,28 @@ into `[{ text: "youtube " }, { link: "https://..." }]`.
 
 **Not available in Expo Go or web.** Requires:
 
-1. **Apple Developer Program** ($99/year) — enroll when the app is ready
+1. **Active Apple Developer Program membership**
 2. **EAS dev build** on your phone (`npm run build:ios`)
 3. `expo-share-intent` (already in `app.json`)
 
-### After you pay for Apple Developer
+### Install on your iPhone
+
+The complete current instructions, signing identifiers, standalone Preview option,
+and phone test checklist are in [IPHONE_TESTING.md](IPHONE_TESTING.md).
 
 ```bash
 npm run eas:login
 npm run device:ios          # register your iPhone
 npm run build:ios           # cloud build (~15 min)
-# Install .ipa from expo.dev link on your phone
-npm start                   # dev server; open Pouch dev client (not Expo Go)
+# Install from the expo.dev build link on your phone
+npm run start:dev           # dev server; open Pouch dev client
 ```
 
 Then: Instagram → Share → **Pouch** → item saved with `source: share-instagram`.
+
+Use `npm run build:ios:preview` for a standalone build that opens without your computer.
+Shared URLs identify known services by hostname; other shares use `source: share`.
+Failed captures show Retry and retain the native share content instead of clearing it.
 
 **Reels:** Instagram often shares a **link** to the reel, not the video file. Pouch will save that URL as a **link** item — which is what you want for finding it later.
 
@@ -235,7 +242,7 @@ Until then, extend `classifyItem.ts` — it's the right tool.
 | `npm run web`                  | Run in browser                        |
 | `npm start`                    | Metro for phone dev client            |
 | `npm test`                     | Unit tests                            |
-| `npm run build:ios`            | EAS iOS build (after Apple Developer) |
+| `npm run build:ios`            | EAS development build for a registered iPhone |
 | `npm run apple:clear-keychain` | Fix cached wrong Apple password       |
 
 

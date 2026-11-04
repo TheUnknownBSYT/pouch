@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useContext } from 'react';
+import { SpaceContext } from '@/contexts/SpaceContext';
 import type { ItemType, TaskPriority } from '@/types/item';
 
 const ICONS: Record<ItemType, keyof typeof Ionicons.glyphMap> = {
@@ -65,11 +67,11 @@ export const spacing = {
 };
 
 export const radii = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 26,
+  sm: 6,
+  md: 10,
+  lg: 12,
+  xl: 12,
+  xxl: 16,
   full: 999,
 };
 
@@ -118,35 +120,37 @@ export const typography = {
 };
 
 export const colors = {
-  background: '#FAFAFA',
+  background: '#F7F6F2',
   surface: '#FFFFFF',
-  border: '#EBEBEF',
-  borderStrong: '#DEDEE4',
-  text: '#131316',
-  textMuted: '#6F6F79',
-  textFaint: '#A8A8B3',
-  accent: '#5750E8',
-  accentMuted: '#EFEEFE',
-  danger: '#E5484D',
-  dangerMuted: '#FCEBEC',
-  inputBackground: '#F3F3F5',
-  success: '#12A16B',
+  border: '#DEE2D9',
+  borderStrong: '#C8CFC4',
+  text: '#202A23',
+  textMuted: '#677168',
+  textFaint: '#737C74',
+  accent: '#286447',
+  onAccent: '#FFFFFF',
+  accentMuted: '#E7EFE5',
+  danger: '#B34436',
+  dangerMuted: '#F9EAE5',
+  inputBackground: '#EEEFE8',
+  success: '#286447',
 };
 
 export const darkColors = {
-  background: '#0A0A0C',
-  surface: '#161618',
-  border: '#26262A',
-  borderStrong: '#35353A',
-  text: '#F5F5F7',
-  textMuted: '#9E9EA8',
-  textFaint: '#68686F',
-  accent: '#8A83F7',
-  accentMuted: '#211F3D',
+  background: '#151A17',
+  surface: '#1E2520',
+  border: '#354139',
+  borderStrong: '#4A594E',
+  text: '#F1F4EE',
+  textMuted: '#ACB7AD',
+  textFaint: '#99A59A',
+  accent: '#70BA90',
+  onAccent: '#10281B',
+  accentMuted: '#263F30',
   danger: '#FF6369',
   dangerMuted: '#3A1E20',
-  inputBackground: '#1F1F22',
-  success: '#3DD68C',
+  inputBackground: '#29322C',
+  success: '#70BA90',
 };
 
 export const shadows = {
@@ -154,9 +158,9 @@ export const shadows = {
   card: {
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0,
     shadowRadius: 3,
-    elevation: 1,
+    elevation: 0,
   },
   // Sheets, dialogs — things that float above the whole screen.
   raised: {
@@ -169,5 +173,14 @@ export const shadows = {
 };
 
 export function useThemeColors(isDark: boolean) {
-  return isDark ? darkColors : colors;
+  const personal = useContext(SpaceContext)?.space;
+  const base = isDark ? darkColors : colors;
+  const palettes = {
+    violet: [base.accent, base.accentMuted],
+    ocean: isDark ? ['#64B8FF', '#142D44'] : ['#1569B8', '#E8F3FF'],
+    forest: isDark ? ['#66D9AE', '#15352B'] : ['#14785A', '#E6F5EE'],
+    sunset: isDark ? ['#FFAC87', '#3C281F'] : ['#B94D26', '#FFF0E7'],
+  };
+  const [accent, accentMuted] = palettes[personal?.premium ? personal.palette : 'violet'] ?? palettes.violet;
+  return { ...base, accent, accentMuted };
 }

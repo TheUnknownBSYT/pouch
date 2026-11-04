@@ -36,18 +36,22 @@ import { ACCOUNT_LABELS } from '@/types/item';
 
 export default function ItemDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <ItemDetail key={id} id={id} />;
+}
+
+function ItemDetail({ id }: { id: string }) {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = useThemeColors(isDark);
-  const { items, saveItem, removeItem } = useItems();
+  const { items, pendingIds, saveItem, removeItem, pullToRefresh, refreshing } = useItems();
 
   const cachedItem = useMemo(() => items.find((row) => row.id === id) ?? null, [id, items]);
 
   const [item, setItem] = useState<Item | null>(cachedItem);
   const [content, setContent] = useState(cachedItem?.content ?? '');
   const [occurredAt, setOccurredAt] = useState(
-    new Date(cachedItem?.occurred_at ?? cachedItem?.created_at ?? Date.now()),
+    () => new Date(cachedItem?.occurred_at ?? cachedItem?.created_at ?? Date.now()),
   );
   const [account, setAccount] = useState<AccountSlug>(cachedItem?.account ?? 'cash');
   const [direction, setDirection] = useState<TransactionDirection>(cachedItem?.direction ?? 'out');
@@ -63,35 +67,17 @@ export default function ItemDetailScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!cachedItem) {
-      return;
-    }
-
-    setItem(cachedItem);
-    setContent(cachedItem.content);
-    setOccurredAt(new Date(cachedItem.occurred_at ?? cachedItem.created_at));
-    setAccount(cachedItem.account ?? 'cash');
-    setDirection(cachedItem.direction ?? 'out');
-    setAmount(cachedItem.amount != null ? String(cachedItem.amount) : '');
-    setPriority(cachedItem.priority ?? 'low');
-    setDueAt(cachedItem.due_at ? new Date(cachedItem.due_at) : null);
-    setLoading(false);
-  }, [cachedItem]);
-
-  useEffect(() => {
-    if (!id || cachedItem) {
+    // Hydrate once. Realtime refreshes must not replace an unfinished edit.
+    if (!id || item) {
       return;
     }
 
     let cancelled = false;
 
     async function loadItem() {
-      setLoading(true);
-      const { data, error: fetchError } = await supabase
-        .from('items')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const { data, error: fetchError } = cachedItem
+        ? await Promise.resolve({ data: cachedItem, error: null })
+        : await supabase.from('items').select('*').eq('id', id).single();
 
       if (cancelled) {
         return;
@@ -120,7 +106,7 @@ export default function ItemDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [cachedItem, id]);
+  }, [cachedItem, id, item]);
 
   const linkUrl = useMemo(
     () => (item?.type === 'link' ? extractFirstUrl(item.content) : null),
@@ -144,6 +130,7 @@ export default function ItemDetailScreen() {
     try {
       const payload: Parameters<typeof saveItem>[1] = {
         content: trimmed,
+        type: item.type,
         occurred_at: occurredAt.toISOString(),
       };
 
@@ -206,7 +193,7 @@ export default function ItemDetailScreen() {
           direction: item.direction,
           priority: item.priority,
           due_at: item.due_at,
-        });
+        }, saveItem);
         setItem(updated);
         if (updated.type === 'expense') {
           setAccount(updated.account ?? 'cash');
@@ -221,7 +208,7 @@ export default function ItemDetailScreen() {
         setError(err instanceof Error ? err.message : 'Failed to change type');
       }
     },
-    [content, item],
+    [content, item, saveItem],
   );
 
   const handleDelete = useCallback(async () => {
@@ -271,6 +258,19 @@ export default function ItemDetailScreen() {
     );
   }
 
+  if (pendingIds.has(id)) {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={{ color: theme.accent, fontWeight: '700' }}>Saved on this device</Text>
+        <RichContentDetail content={item.content} />
+        <Text style={{ color: theme.textMuted }}>This capture will sync automatically when you’re connected. Editing becomes available after it syncs.</Text>
+        <PressableScale disabled={refreshing} onPress={() => void pullToRefresh()} style={[styles.primaryButton, { backgroundColor: theme.accent }]}>
+          <Text style={styles.primaryButtonText}>{refreshing ? 'Syncing…' : 'Retry sync'}</Text>
+        </PressableScale>
+      </ScrollView>
+    );
+  }
+
   return (
     <>
       <Stack.Screen
@@ -311,7 +311,7 @@ export default function ItemDetailScreen() {
           <PressableScale
             onPress={() => void handleOpenLink()}
             style={[styles.openLinkButton, { backgroundColor: theme.accent }]}>
-            <Ionicons color="#FFFFFF" name="open-outline" size={18} />
+            <Ionicons color={theme.onAccent} name="open-outline" size={18} />
             <Text numberOfLines={1} style={styles.openLinkText}>
               Open link
             </Text>
@@ -333,7 +333,10 @@ export default function ItemDetailScreen() {
               <PriorityPicker value={priority} onChange={setPriority} />
             </View>
             {dueAt ? (
-              <DateField label="Due date" value={dueAt} onChange={setDueAt} />
+              <View style={styles.section}>
+                <DateField label="Due date" value={dueAt} onChange={setDueAt} />
+                <PressableScale onPress={() => setDueAt(null)}><Text style={{ color: theme.accent }}>Remove due date</Text></PressableScale>
+              </View>
             ) : (
               <PressableScale
                 scaleTo={0.98}
@@ -350,13 +353,13 @@ export default function ItemDetailScreen() {
             <PressableScale
               onPress={() => void callPhone(item.content)}
               style={[styles.openLinkButton, { backgroundColor: theme.accent, flex: 1 }]}>
-              <Ionicons color="#FFFFFF" name="call-outline" size={18} />
+              <Ionicons color={theme.onAccent} name="call-outline" size={18} />
               <Text style={styles.openLinkText}>Call</Text>
             </PressableScale>
             <PressableScale
               onPress={() => void openWhatsApp(item.content)}
               style={[styles.openLinkButton, { backgroundColor: '#25D366', flex: 1 }]}>
-              <Ionicons color="#FFFFFF" name="logo-whatsapp" size={18} />
+              <Ionicons color={theme.onAccent} name="logo-whatsapp" size={18} />
               <Text style={styles.openLinkText}>WhatsApp</Text>
             </PressableScale>
           </View>
@@ -431,6 +434,7 @@ export default function ItemDetailScreen() {
         {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
 
         <PressableScale
+          disabled={saving}
           onPress={() => void handleSave()}
           style={[styles.primaryButton, { backgroundColor: theme.accent }]}>
           <Text style={styles.primaryButtonText}>Save changes</Text>
@@ -465,8 +469,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   container: {
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
     gap: spacing.lg,
-    padding: spacing.lg,
+    padding: spacing.xl,
   },
   headerSpinner: {
     marginRight: spacing.sm,
@@ -507,7 +514,7 @@ const styles = StyleSheet.create({
   previewCard: {
     borderRadius: radii.xl,
     gap: spacing.sm + 2,
-    padding: spacing.lg,
+    padding: spacing.xl,
   },
   openLinkButton: {
     alignItems: 'center',
@@ -526,7 +533,7 @@ const styles = StyleSheet.create({
   taskCard: {
     borderRadius: radii.xl,
     gap: spacing.md + 2,
-    padding: spacing.lg,
+    padding: spacing.xl,
   },
   taskRow: {
     alignItems: 'center',
@@ -577,10 +584,10 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 26,
     minHeight: 200,
-    padding: spacing.lg,
+    padding: spacing.xl,
   },
   linkInput: {
-    color: '#2563EB',
+    textDecorationLine: 'underline',
   },
   quoteInput: {
     fontStyle: 'italic',

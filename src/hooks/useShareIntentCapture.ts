@@ -1,60 +1,81 @@
-import { useEffect, useRef } from 'react';
-import { useShareIntent } from 'expo-share-intent';
+import * as Haptics from 'expo-haptics';
+import { useShareIntentContext } from 'expo-share-intent';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useItems } from '@/hooks/useItems';
-import type { ItemSource } from '@/types/item';
-
-function mapShareSource(value?: string | null): ItemSource {
-  const normalized = (value ?? '').toLowerCase();
-  if (normalized.includes('instagram')) {
-    return 'share-instagram';
-  }
-  if (normalized.includes('youtube')) {
-    return 'share-youtube';
-  }
-  if (normalized.includes('whatsapp')) {
-    return 'share-whatsapp';
-  }
-  return 'manual';
-}
+import { inferShareSource, normalizeSharedContent } from '@/lib/shared-content';
 
 export function useShareIntentCapture() {
   const { user } = useAuth();
   const { addItem } = useItems();
-  const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntent();
-  const handledKey = useRef<string | null>(null);
+  // The provider owns the only native listener.
+  const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
+  const attemptedContent = useRef<string | null>(null);
+  const latestShare = useRef(shareIntent);
+  const saving = useRef(false);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || !hasShareIntent || !shareIntent) {
+    latestShare.current = shareIntent;
+  }, [shareIntent]);
+
+  const save = useCallback(async () => {
+    if (!user || !hasShareIntent || saving.current) return;
+    const content = normalizeSharedContent(shareIntent);
+    if (!content) {
+      setSaveError('Pouch can save shared text and links. Share a link to this file instead.');
+      setStatus('error');
       return;
     }
 
-    const payload = shareIntent.text ?? shareIntent.webUrl ?? shareIntent.files?.[0]?.path;
-    if (!payload) {
-      return;
+    saving.current = true;
+    setStatus('saving');
+    setSaveError(null);
+    try {
+      await addItem(content, inferShareSource(content));
+      // A second share may have arrived while the network request was in flight.
+      if (normalizeSharedContent(latestShare.current) === content) resetShareIntent();
+      setStatus('saved');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      // Keep native content intact when saving fails or the app backgrounds for login.
+      setSaveError('Couldn’t save your share. Check your connection and try again.');
+      setStatus('error');
+    } finally {
+      saving.current = false;
     }
-
-    const key = `${shareIntent.meta?.title ?? ''}:${payload}`;
-    if (handledKey.current === key) {
-      return;
-    }
-
-    handledKey.current = key;
-    const source = mapShareSource(shareIntent.meta?.title);
-
-    void addItem(String(payload), source)
-      .catch((err) => {
-        console.warn('Failed to save shared item', err);
-      })
-      .finally(() => {
-        resetShareIntent();
-      });
   }, [addItem, hasShareIntent, resetShareIntent, shareIntent, user]);
 
   useEffect(() => {
-    if (error) {
-      console.warn('Share intent error', error);
+    if (!hasShareIntent) {
+      attemptedContent.current = null;
+      return;
     }
-  }, [error]);
+    const content = normalizeSharedContent(shareIntent) ?? 'unsupported';
+    if (!user || saving.current || attemptedContent.current === content) return;
+    attemptedContent.current = content;
+    void Promise.resolve().then(save);
+  }, [hasShareIntent, save, shareIntent, status, user]);
+
+  useEffect(() => {
+    if (status !== 'saved') return;
+    const timer = setTimeout(() => setStatus('idle'), 2500);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  const dismiss = () => {
+    resetShareIntent();
+    setSaveError(null);
+    setStatus('idle');
+  };
+
+  return {
+    status,
+    message: saveError ?? (error ? 'Couldn’t read that share. Please try sharing it again.' : null),
+    waitingForSignIn: hasShareIntent && !user,
+    retry: save,
+    dismiss,
+  };
 }

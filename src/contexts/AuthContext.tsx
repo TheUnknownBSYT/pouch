@@ -7,7 +7,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { getLastEmail, saveLastEmail } from '@/lib/auth-storage';
 import { subscribeToAuthLinks } from '@/lib/auth-callback';
@@ -33,6 +33,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void getLastEmail().then(setLastEmail);
     return subscribeToAuthLinks();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const updateRefresh = (state: string) => {
+      if (state === 'active') void supabase.auth.startAutoRefresh();
+      else void supabase.auth.stopAutoRefresh();
+    };
+    updateRefresh(AppState.currentState);
+    const subscription = AppState.addEventListener('change', updateRefresh);
+    return () => {
+      subscription.remove();
+      void supabase.auth.stopAutoRefresh();
+    };
   }, []);
 
   useEffect(() => {
@@ -99,7 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: error?.message ?? null };
       },
       signOut: async () => {
-        await supabase.auth.signOut();
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
       },
     }),
     [lastEmail, loading, session],

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PouchBrand } from '@/components/brand';
 import { PressableScale } from '@/components/pressable-scale';
 import { useAuth } from '@/contexts/AuthContext';
 import { radii, shadows, spacing, typography, useThemeColors } from '@/constants/ui';
@@ -20,7 +21,8 @@ export default function AuthScreen() {
   const colorScheme = useColorScheme();
   const theme = useThemeColors(colorScheme === 'dark');
 
-  const [email, setEmail] = useState('');
+  const [emailInput, setEmail] = useState<string | null>(null);
+  const email = emailInput ?? lastEmail ?? '';
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [submitting, setSubmitting] = useState(false);
@@ -28,12 +30,6 @@ export default function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   const [emailFocused, setEmailFocused] = useState(false);
   const [codeFocused, setCodeFocused] = useState(false);
-
-  useEffect(() => {
-    if (lastEmail) {
-      setEmail(lastEmail);
-    }
-  }, [lastEmail]);
 
   const handleSendCode = async () => {
     if (!email.trim()) {
@@ -79,17 +75,15 @@ export default function AuthScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.inner}>
-        <View style={styles.hero}>
-          <View style={[styles.logo, shadows.raised, { backgroundColor: theme.accent }]}>
-            <Text style={styles.logoText}>B</Text>
-          </View>
-          <Text style={[styles.title, { color: theme.text }]}>Pouch</Text>
+        <View style={[styles.hero, { alignItems: 'flex-start' }]}>
+          <PouchBrand />
+          <Text style={[styles.title, { color: theme.text }]}>{'In. And on\nwith your day.'}</Text>
           <Text style={[styles.subtitle, { color: theme.textMuted }]}>
-            Capture in 2 seconds. Find in 5. Sign in once — we remember you.
+            Links, notes, tasks. Drop them here. Find them when you need them.
           </Text>
         </View>
 
-        <View style={[styles.card, shadows.card, { backgroundColor: theme.surface }]}>
+        <View style={[styles.card, shadows.card, { backgroundColor: theme.background }]}>
           <View
             style={[
               styles.inputWrap,
@@ -126,6 +120,7 @@ export default function AuthScreen() {
                 },
               ]}>
               <TextInput
+                autoFocus
                 autoComplete="one-time-code"
                 keyboardType="number-pad"
                 maxLength={8}
@@ -147,9 +142,9 @@ export default function AuthScreen() {
             onPress={() => void (step === 'email' ? handleSendCode() : handleVerifyCode())}
             style={[styles.button, { backgroundColor: theme.accent, opacity: submitting ? 0.85 : 1 }]}>
             {submitting ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={theme.onAccent} />
             ) : (
-              <Text style={styles.buttonText}>{step === 'email' ? 'Send code' : 'Verify & sign in'}</Text>
+              <Text style={[styles.buttonText, { color: theme.onAccent }]}>{step === 'email' ? 'Continue with email' : 'Verify & sign in'}</Text>
             )}
           </PressableScale>
 
@@ -168,6 +163,7 @@ export default function AuthScreen() {
           ) : null}
         </View>
 
+        {step === 'email' ? <Text style={{ color: theme.textMuted, fontSize: 13, lineHeight: 20 }}>We’ll email you a sign-in code.{'\n'}No password to remember.</Text> : null}
         {message ? <Text style={[styles.message, { color: theme.accent }]}>{message}</Text> : null}
         {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
       </KeyboardAvoidingView>
@@ -181,9 +177,12 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 480,
     paddingHorizontal: spacing.xl,
-    gap: spacing.xl,
+    paddingTop: 40,
+    gap: 20,
+    alignSelf: 'center',
   },
   hero: {
     alignItems: 'center',
@@ -204,17 +203,19 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.display,
-    fontSize: 32,
+    fontSize: 36,
+    lineHeight: 46,
+    marginTop: 64,
+    letterSpacing: -1.2,
   },
   subtitle: {
     ...typography.body,
     lineHeight: 24,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   card: {
     borderRadius: radii.xxl,
     gap: spacing.md,
-    padding: spacing.xl,
   },
   inputWrap: {
     borderRadius: radii.lg,

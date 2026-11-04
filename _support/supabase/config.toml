@@ -1,0 +1,7 @@
+project_id = "pouch"
+
+[functions.whatsapp-webhook]
+# Meta supplies X-Hub-Signature-256, not a Supabase JWT.
+# The function verifies the raw body before touching the database.
+verify_jwt = false
+

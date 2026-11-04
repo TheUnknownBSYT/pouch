@@ -142,10 +142,10 @@ export default function AccountsScreen() {
               },
             ]}>
             {exporting ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={theme.onAccent} />
             ) : (
               <>
-                <Ionicons color="#FFFFFF" name="download-outline" size={17} />
+                <Ionicons color={theme.onAccent} name="download-outline" size={17} />
                 <Text style={styles.exportButtonText}>Export CSV</Text>
               </>
             )}
@@ -204,15 +204,18 @@ export default function AccountsScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
     gap: spacing.lg,
-    padding: spacing.lg,
+    padding: spacing.xl,
     paddingBottom: spacing.xxl,
   },
   heading: {
     ...typography.title,
   },
   balanceGrid: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: spacing.md,
   },
   balanceCard: {
@@ -246,9 +249,9 @@ const styles = StyleSheet.create({
   monthButton: {
     alignItems: 'center',
     borderRadius: radii.full,
-    height: 34,
+    height: 44,
     justifyContent: 'center',
-    width: 34,
+    width: 44,
   },
   monthTitle: {
     fontSize: 16,

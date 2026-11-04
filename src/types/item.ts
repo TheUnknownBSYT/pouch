@@ -11,9 +11,11 @@ export type ItemType =
   | 'quote';
 
 export type ItemSource =
+  | 'share'
   | 'share-instagram'
   | 'share-youtube'
   | 'share-whatsapp'
+  | 'whatsapp'
   | 'manual'
   | 'web';
 

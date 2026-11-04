@@ -13,13 +13,13 @@ import type {
   ItemType,
   TaskPriority,
   TransactionDirection,
-} from '@/types/item';
+} from '../types/item.ts';
 
 const URL_PATTERN =
   /(?:https?:\/\/|www\.)[^\s]+|[a-z0-9-]+\.(com|org|net|io|app|dev|co|in|me|tv|ly)(?:\/[^\s]*)?/i;
 
 const PHONE_PATTERN =
-  /(?:\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b[6-9]\d{9}\b|\+\d{1,3}[\s-]?\d{6,14}\b/;
+  /(?:\+91[\s-]?)?\b[6-9]\d{4}[\s-]?\d{5}\b|\+\d{1,3}[\s-]?\d{6,14}\b/;
 
 const QUOTE_PATTERN = /^["'「『].+["'」』]$/s;
 const FORWARD_PATTERN = /^>\s?.+/m;
@@ -49,8 +49,8 @@ const TASK_PATTERNS = [
   /^(call|buy|send|email|text|pick up|pickup|book|schedule|finish|complete|remind|check|fix|update|write|read|watch|listen|meet|go to|get|make|do|try|start|stop|cancel|return|submit|apply|download|install|setup|set up|clean|organize|organise|pack|unpack|move|drop off|dropoff)\b/i,
 ];
 
-const HIGH_PRIORITY_PATTERN = /\b(asap|urgent|!!!|critical|important!)\b/i;
-const MEDIUM_PRIORITY_PATTERN = /\b(important|!!|priority)\b/i;
+const HIGH_PRIORITY_PATTERN = /\b(asap|urgent|critical)\b|!!!|\bimportant!/i;
+const MEDIUM_PRIORITY_PATTERN = /\b(important|priority)\b|!!/i;
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -61,10 +61,6 @@ function parseAmount(raw: string): number | null {
     return null;
   }
 
-  if (Number.isInteger(value) && value >= 1900 && value <= 2100) {
-    return null;
-  }
-
   return value;
 }
 
@@ -72,7 +68,7 @@ function findAnyAmount(content: string): number | null {
   const matches = content.match(/\b([\d,]+(?:\.\d{1,2})?)\b/g) ?? [];
   for (const match of matches) {
     const amount = parseAmount(match);
-    if (amount !== null) {
+    if (amount !== null && !(amount >= 1900 && amount <= 2100)) {
       return amount;
     }
   }
@@ -126,8 +122,10 @@ export function detectDueDate(content: string, baseDate = new Date()): string | 
 
   const inDays = lower.match(/\bin\s+(\d+)\s+days?\b/);
   if (inDays?.[1]) {
+    const days = Number(inDays[1]);
+    if (!Number.isSafeInteger(days) || days > 36500) return null;
     const date = startOfDay(baseDate);
-    date.setDate(date.getDate() + Number.parseInt(inDays[1], 10));
+    date.setDate(date.getDate() + days);
     return date.toISOString();
   }
 
@@ -152,7 +150,7 @@ export function detectDueDate(content: string, baseDate = new Date()): string | 
       ? Number.parseInt(dueMatch[3].length === 2 ? `20${dueMatch[3]}` : dueMatch[3], 10)
       : baseDate.getFullYear();
     const date = startOfDay(new Date(year, month, day));
-    if (!Number.isNaN(date.getTime())) {
+    if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) {
       return date.toISOString();
     }
   }
@@ -170,6 +168,11 @@ function detectQuote(content: string): boolean {
 }
 
 function detectExpense(content: string): ClassifiedItem | null {
+  // These common verbs describe more than money. Require currency or a money context.
+  const ambiguousIncome = /\b(got|received|made|earned|lost)\b/i.test(content);
+  const explicitMoney = /₹|\b(?:rs\.?|inr|rupees?|salary|refund|income|cash|money|gpay|upi)\b/i.test(content);
+  if (ambiguousIncome && !explicitMoney && !/\b(?:spent|paid|bought|purchased|charged|credited|debited)\b/i.test(content)
+    && !/\b(?:got|received|earned)\s+[\d,]+(?:\.\d+)?\s+(?:from|for)\b/i.test(content)) return null;
   const hasExpenseSignal =
     EXPENSE_IN_PATTERN.test(content) ||
     EXPENSE_OUT_PATTERN.test(content) ||
@@ -208,7 +211,9 @@ function detectExpense(content: string): ClassifiedItem | null {
     };
   }
 
-  if (EXPENSE_OUT_PATTERN.test(content) || EXPENSE_IN_PATTERN.test(content)) {
+  // Ambiguous verbs ("got an idea", "made a playlist", "lost my keys")
+  // are not money signals without an amount.
+  if (/\b(spent|paid|bought|purchased|refunded|credited|debited|salary|income)\b/i.test(content)) {
     return {
       type: 'expense',
       amount: null,
@@ -228,7 +233,7 @@ function detectTask(content: string): boolean {
   return TASK_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 
-export function classifyItem(content: string): ClassifiedItem {
+export function classifyItem(content: string, baseDate = new Date()): ClassifiedItem {
   const trimmed = content.trim();
   if (!trimmed) {
     return { type: 'unsorted', amount: null };
@@ -236,6 +241,17 @@ export function classifyItem(content: string): ClassifiedItem {
 
   if (URL_PATTERN.test(trimmed)) {
     return { type: 'link', amount: null };
+  }
+
+  if (detectQuote(trimmed)) return { type: 'quote', amount: null };
+
+  // An instruction containing a price/phone number is still something to do.
+  // Completed purchases continue through the expense detector below.
+  if (detectTask(trimmed) && !/^(?:bought|paid|spent|received|earned)\b/i.test(trimmed)) {
+    return {
+      type: 'task', amount: null,
+      priority: detectPriority(trimmed), due_at: detectDueDate(trimmed, baseDate),
+    };
   }
 
   const expense = detectExpense(trimmed);
@@ -256,7 +272,7 @@ export function classifyItem(content: string): ClassifiedItem {
       type: 'task',
       amount: null,
       priority: detectPriority(trimmed),
-      due_at: detectDueDate(trimmed),
+      due_at: detectDueDate(trimmed, baseDate),
     };
   }
 

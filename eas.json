@@ -1,10 +1,11 @@
 {
   "cli": {
-    "version": ">= 16.0.0",
+    "version": ">= 22.0.0",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -12,9 +13,11 @@
       }
     },
     "preview": {
+      "environment": "preview",
       "distribution": "internal"
     },
     "production": {
+      "environment": "production",
       "autoIncrement": true
     }
   },
