@@ -4,12 +4,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState, Platform } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { buildCapture } from '@/lib/capture';
 import { CaptureQueue } from '@/lib/capture-queue';
 import { deleteItem, fetchItems, subscribeToItems, syncCapture, updateItem } from '@/lib/items';
 import type { Item, ItemSource, ItemType } from '@/types/item';
 
 interface ItemsContextValue {
+  deleteAccount: () => Promise<void>;
   items: Item[];
   pendingIds: Set<string>;
   loading: boolean;
@@ -175,7 +177,25 @@ export function ItemsProvider({ children }: { children: React.ReactNode }) {
     setItems((current) => current.filter((item) => item.id !== id));
   }, [ensureSynced]);
 
-  return <ItemsContext.Provider value={{ items, pendingIds, loading, refreshing, error, refresh, pullToRefresh, addItem, saveItem, toggleTaskDone, removeItem }}>{children}</ItemsContext.Provider>;
+  const deleteAccount = async () => {
+    if (!userId) throw new Error('Sign in first.');
+    const { data, error: failure } = await supabase.functions.invoke('delete-account', { body: {} });
+    if (failure || !data?.deleted) throw new Error('Account deletion failed. Check your connection and try again.');
+    active.current = false;
+    // Drain existing writes before removing this account's device data.
+    await queue?.flush(syncCapture, () => {}, () => false).catch(() => {});
+    await cacheWrites.current.catch(() => {});
+    try {
+      await AsyncStorage.multiRemove([`pouch:outbox:v1:${userId}`, `pouch:inbox:v1:${userId}`, `pouch:draft:v1:${userId}`, 'pouch:last-email']);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.localStorage.removeItem('pouch:last-email');
+    } finally {
+      queues.delete(userId);
+      setItems([]);
+      await supabase.auth.signOut({ scope: 'local' });
+    }
+  };
+
+  return <ItemsContext.Provider value={{ deleteAccount, items, pendingIds, loading, refreshing, error, refresh, pullToRefresh, addItem, saveItem, toggleTaskDone, removeItem }}>{children}</ItemsContext.Provider>;
 }
 
 export function useItems() {

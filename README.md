@@ -16,3 +16,5 @@ npm run web
 ```
 
 Non-app files (SQL migrations, docs, scripts) are in [`_support/`](_support/).
+
+**App Store release checklist:** [_support/docs/APP_STORE_RELEASE.md](_support/docs/APP_STORE_RELEASE.md)

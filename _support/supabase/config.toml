@@ -5,3 +5,7 @@ project_id = "pouch"
 # The function verifies the raw body before touching the database.
 verify_jwt = false
 
+
+[functions.delete-account]
+# The handler independently validates the bearer token with auth.getUser.
+verify_jwt = false

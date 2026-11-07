@@ -21,6 +21,7 @@
   ],
   "exclude": [
     "_support/supabase/functions/whatsapp-webhook/index.ts",
+    "_support/supabase/functions/delete-account/index.ts",
     "**/*.test.ts"
   ]
 }

@@ -28,3 +28,14 @@ assert.deepEqual(
   'App and share extension must use the same App Group.',
 );
 console.log('iOS build configuration and public Supabase settings are valid.');
+
+if (process.env.EAS_BUILD_PROFILE === 'production' || process.argv.includes('--production')) {
+  for (const name of ['EXPO_PUBLIC_PRIVACY_URL', 'EXPO_PUBLIC_SUPPORT_URL']) {
+    const value = process.env[name];
+    assert(value && new URL(value).protocol === 'https:', `${name} must be a published HTTPS page before release.`);
+    assert(!/YOUR_|example\.(com|org)/i.test(value), `${name} must not be a placeholder.`);
+  }
+  if (process.env.EXPO_PUBLIC_ENABLE_REWARDS === 'true') {
+    assert(process.env.EXPO_PUBLIC_INSTALL_URL?.startsWith('https://'), 'Rewards require a real install URL.');
+  }
+}

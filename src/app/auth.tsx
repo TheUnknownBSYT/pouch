@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -164,6 +165,7 @@ export default function AuthScreen() {
         </View>
 
         {step === 'email' ? <Text style={{ color: theme.textMuted, fontSize: 13, lineHeight: 20 }}>We’ll email you a sign-in code.{'\n'}No password to remember.</Text> : null}
+        {process.env.EXPO_PUBLIC_PRIVACY_URL ? <PressableScale accessibilityRole="link" onPress={() => void Linking.openURL(process.env.EXPO_PUBLIC_PRIVACY_URL!).catch(() => setError('Could not open the privacy policy.'))}><Text style={{ color: theme.accent }}>Privacy policy</Text></PressableScale> : null}
         {message ? <Text style={[styles.message, { color: theme.accent }]}>{message}</Text> : null}
         {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
       </KeyboardAvoidingView>

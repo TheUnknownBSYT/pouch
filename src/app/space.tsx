@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, Share, StyleSheet, Switch, Text, TextInput, useColorScheme, View } from 'react-native';
+import { Linking, ScrollView, Share, StyleSheet, Switch, Text, TextInput, useColorScheme, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton, SettingsCard } from '@/components/settings-ui';
 import { PressableScale } from '@/components/pressable-scale';
@@ -17,6 +17,9 @@ const palettes: { id: Palette; name: string; color: string }[] = [
   { id: 'forest', name: 'Forest', color: '#14785A' },
   { id: 'sunset', name: 'Sunset', color: '#B94D26' },
 ];
+const rewardsEnabled = process.env.EXPO_PUBLIC_ENABLE_REWARDS === 'true';
+const privacyUrl = process.env.EXPO_PUBLIC_PRIVACY_URL;
+const supportUrl = process.env.EXPO_PUBLIC_SUPPORT_URL;
 const installUrl = process.env.EXPO_PUBLIC_INSTALL_URL;
 
 export default function SpaceScreen() {
@@ -24,12 +27,13 @@ export default function SpaceScreen() {
   const insets = useSafeAreaInsets();
   const theme = useThemeColors(useColorScheme() === 'dark');
   const { user, signOut } = useAuth();
-  const { pendingIds } = useItems();
+  const { pendingIds, deleteAccount } = useItems();
   const { space, loading, error, refresh, update, claimInvite } = useSpace();
   const [name, setName] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showDelete, setShowDelete] = useState(false);
   const [showSignOut, setShowSignOut] = useState(false);
   useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
   const run = async (action: () => Promise<void>, success?: string) => {
@@ -68,7 +72,7 @@ export default function SpaceScreen() {
       <ActionButton label="Save name" disabled={!space || loading} busy={busy} secondary onPress={() => space && void run(() => update(name ?? space.display_name, space.palette, space.compact), 'Name saved.')} />
     </SettingsCard>
 
-    <SettingsCard title={space?.premium ? 'Make yourself at home' : 'Pouch Plus · A little more you'}>
+    {rewardsEnabled && <SettingsCard title={space?.premium ? 'Make yourself at home' : 'Pouch Plus · A little more you'}>
       <Text style={body}>Personal colors and a compact inbox. Capturing, sorting, search, tasks, expenses, export, and WhatsApp capture stay free.</Text>
       <View style={styles.paletteRow}>
         {palettes.map((palette) => {
@@ -84,9 +88,9 @@ export default function SpaceScreen() {
       </View>
       <View style={styles.row}><Text style={[body, { flex: 1 }]}>Compact inbox</Text><Switch accessibilityLabel="Compact inbox" disabled={!space?.premium || busy} value={Boolean(space?.premium && space.compact)} onValueChange={(value) => { if (space) saveAppearance(space.palette, value); }} trackColor={{ true: theme.accent }} /></View>
       {!space?.premium ? <Text style={body}>Earn lifetime Plus with three friends below. Paid upgrades aren’t available yet.</Text> : null}
-    </SettingsCard>
+    </SettingsCard>}
 
-    <SettingsCard title={space?.premium ? 'Good things are worth sharing' : 'Bring 3 friends. Keep Plus forever.'}>
+    {rewardsEnabled && <SettingsCard title={space?.premium ? 'Good things are worth sharing' : 'Bring 3 friends. Keep Plus forever.'}>
       <Text style={body}>Each friend installs Pouch, verifies their email, adds your code within 14 days, and saves their first capture in the mobile app. Three qualifying friends unlock lifetime Plus for you.</Text>
       <View style={styles.progressRow}>
         {[1, 2, 3].map((step) => <View key={step} style={[styles.progress, { backgroundColor: (space?.qualified_invites ?? 0) >= step ? theme.accent : theme.inputBackground }]} />)}
@@ -103,13 +107,17 @@ export default function SpaceScreen() {
         <TextInput accessibilityLabel="Friend’s invite code" placeholder="Have a friend’s code?" placeholderTextColor={theme.textFaint} autoCapitalize="characters" autoCorrect={false} maxLength={12} value={code} onChangeText={setCode} style={inputStyle} />
         <ActionButton label="Use invite code" secondary busy={busy} disabled={!/^[A-Fa-f0-9]{12}$/.test(code.trim())} onPress={() => void run(() => claimInvite(code), 'Invite added. Your friend gets credit after your first mobile capture.')} />
       </> : space?.claimed_invite ? <Text style={body}>Your friend’s invite is linked.</Text> : null}
-    </SettingsCard>
+    </SettingsCard>}
 
     <SettingsCard title="Your account">
       <Text style={body}>{user?.email}</Text>
       <ActionButton label="Accounts & expense export" secondary onPress={() => router.push('/accounts')} />
+      {privacyUrl ? <ActionButton label="Privacy policy" secondary onPress={() => void run(async () => { await Linking.openURL(privacyUrl); })} /> : null}
+      {supportUrl ? <ActionButton label="Help & support" secondary onPress={() => void run(async () => { await Linking.openURL(supportUrl); })} /> : null}
+      <ActionButton label="Delete account" secondary onPress={() => setShowDelete(true)} />
       <ActionButton label="Sign out" secondary onPress={() => setShowSignOut(true)} />
     </SettingsCard>
+    <ConfirmDialog visible={showDelete} title="Permanently delete your account?" message="Your account, saved captures, WhatsApp connection, profile and rewards will be deleted. Unsynced captures on this device will also be removed. This cannot be undone." confirmLabel="Delete account" destructive loading={busy} onCancel={() => { if (!busy) setShowDelete(false); }} onConfirm={() => void run(deleteAccount)} />
     <ConfirmDialog visible={showSignOut} title="Sign out of Pouch?" message={pendingIds.size ? `${pendingIds.size} captures are saved only on this device. They’ll sync when you sign back into this account. Don’t uninstall Pouch before they sync.` : 'Your saved items will be here when you sign back in.'} confirmLabel="Sign out" loading={busy} onCancel={() => setShowSignOut(false)} onConfirm={() => void run(signOut)} />
   </ScrollView>;
 }
