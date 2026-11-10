@@ -102,5 +102,14 @@ try {
   await asUser(users[0], () => rpc('disconnect_my_whatsapp'));
   check(!(await asUser(users[0], () => rpc('get_my_whatsapp'))).connected, 'disconnect removes the mapping');
   check(!await capture(['919876543210', 'wamid.after', 'after disconnect', '{"type":"note"}', new Date().toISOString()]), 'disconnected sender cannot add captures');
+  // Account deletion must also remove private routing data and reward metadata.
+  await db.query('delete from auth.users where id = $1', [users[0]]);
+  for (const table of ['items', 'profiles', 'entitlements', 'whatsapp_links', 'whatsapp_pairing', 'whatsapp_receipts']) {
+    check(Number((await one(`select count(*) as total from public.${table} where user_id = $1`, [users[0]])).total) === 0, `${table} cascades on account deletion`);
+  }
+  check(Number((await one('select count(*) as total from public.referrals where inviter_id = $1 or invitee_id = $1', [users[0]])).total) === 0, 'referral relationships cascade on deletion');
+  check(Number((await one('select count(*) as total from public.items where user_id = $1', [users[1]])).total) > 0, 'account deletion preserves another account’s captures');
+  await asUser(users[0], () => expectFailure(() => rpc('get_my_space'), 'a stale JWT cannot recreate a deleted profile'));
+  await asUser(users[0], () => expectFailure(() => db.query("insert into public.items(user_id, content, type) values($1, 'stale session', 'note')", [users[0]]), 'a stale JWT cannot recreate deleted account data'));
   console.log(`Backend integration: ${assertions} assertions passed.`);
 } finally { await db.close(); }

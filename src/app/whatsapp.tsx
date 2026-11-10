@@ -88,29 +88,34 @@ export default function WhatsAppScreen() {
     <View style={styles.hero}>
       <View style={[styles.icon, { backgroundColor: theme.accentMuted }]}><Ionicons name="logo-whatsapp" size={32} color={theme.accent} /></View>
       <Text style={[typography.display, { color: theme.text, textAlign: 'center' }]}>Same habit. Less clutter.</Text>
-      <Text style={[body, { textAlign: 'center' }]}>Text the Pouch WhatsApp contact. Find it sorted in your inbox.</Text>
+      <Text style={[body, { textAlign: 'center' }]}>{configured ? 'Text the Pouch WhatsApp contact. Find it sorted in your inbox.' : 'Bring the notes and links you text yourself into Pouch.'}</Text>
     </View>
     {error ? <Text accessibilityLiveRegion="polite" style={[typography.bodySmall, { color: theme.danger }]}>{error}</Text> : null}
-    <SettingsCard title={connection?.connected ? 'You’re connected' : 'Connect once. Then just text.'}>
+    {configured ? <SettingsCard title={connection?.connected ? 'You’re connected' : 'Connect once. Then just text.'}>
       {connection?.connected ? <>
         <Text accessibilityLiveRegion="polite" style={body}>WhatsApp ending in {connection.suffix} is linked. New text and links sent to Pouch will arrive automatically.</Text>
+        <Text style={body}>Check your Pouch inbox to confirm a capture was saved. WhatsApp’s delivered indicator only confirms delivery to the business contact.</Text>
         <ActionButton label="Open Pouch in WhatsApp" onPress={() => void Linking.openURL(`https://wa.me/${number}`).catch(() => setError('Couldn’t open WhatsApp.'))} />
         <ActionButton label="Disconnect WhatsApp" secondary onPress={() => setDisconnecting(true)} />
       </> : <>
         <Text style={body}>1. Open the Pouch chat below.</Text>
         <Text style={body}>2. Send the connection message as written.</Text>
         <Text style={body}>3. Come back here to confirm. Then save that chat as “Pouch”.</Text>
-        {configured ? <>
+        <Text style={body}>Connecting lets Pouch process and store new texts and links you send to this contact. Your other chats stay private. You can disconnect anytime.</Text>
+        <>
           <ActionButton label={pairing && !expired ? 'Open connection message again' : 'Connect with WhatsApp'} busy={busy} disabled={!connection} onPress={() => void connect()} />
           <ActionButton label="Check connection" secondary onPress={() => void refresh()} />
           {pairing ? <Text style={[typography.bodySmall, { color: theme.textMuted }]}>{expired ? 'This connection message has expired. Create a new one above.' : 'Waiting for your connection message. The private code expires in 10 minutes; don’t forward it to anyone.'}</Text> : null}
-        </> : <Text style={body}>Direct WhatsApp capture isn’t available in this build yet. You can still share or paste messages into Pouch below.</Text>}
+        </>
       </>}
-    </SettingsCard>
+    </SettingsCard> : null}
     <SettingsCard title="Still texting yourself?">
       <Text style={body}>Keep your “Message yourself” chat. To save something from it, select the text or link, open your phone’s Share menu, and choose Pouch. If Share isn’t offered, copy it and paste it into Pouch.</Text>
       <Text style={body}>Pouch can’t automatically read your personal chats. Only messages you share, paste, or send to the connected Pouch contact are added.</Text>
     </SettingsCard>
+    {!configured ? <SettingsCard title="Texting Pouch directly">
+      <Text style={body}>Direct WhatsApp capture isn’t available in this build yet. For now, share or paste the messages you want to keep.</Text>
+    </SettingsCard> : null}
     <SettingsCard title="A few things to know">
       <Text style={body}>Text and links are supported. Photos, voice notes, files, and old chat history aren’t imported.</Text>
       <Text style={body}>Messages sent to the Pouch contact are processed by WhatsApp’s Business Platform and stored in your Pouch account. Disconnect anytime; captures already saved stay in your inbox.</Text>

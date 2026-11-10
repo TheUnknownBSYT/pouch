@@ -8,7 +8,9 @@ The repository is not a deployed, device-tested release. Do not submit until the
 
 ## What has been added for release
 
-- In-app Delete account with an irreversible-action confirmation, an authenticated server endpoint, and device-cache removal after server success. The server derives identity from auth.getUser(token), never from a client-supplied account ID. Existing foreign keys cascade account data deletion.
+Deployment update: both Edge Functions are deployed to the connected project. The profile/WhatsApp database migration is still pending because the Supabase connector's confirmations expired. WhatsApp is not enabled: the owner has not yet created the Meta app or business number. See [WHATSAPP_SETUP.md](WHATSAPP_SETUP.md) for verified endpoint results and the exact remaining setup.
+
+- In-app Delete account with an irreversible-action confirmation, an authenticated server endpoint, and device-cache removal after server success. The server derives identity from auth.getUser(token), never from a client-supplied account ID, then revokes refresh sessions globally before deletion. Existing access JWTs expire normally; foreign keys cascade owned records and prevent their recreation after the Auth user is deleted.
 - Privacy and support links in Your space, plus a privacy link before sign-in.
 - Production build validation refuses missing or placeholder privacy/support URLs.
 - Launch flags keep unfinished reward marketing out of the default build.

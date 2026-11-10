@@ -23,7 +23,7 @@ The app shows only the last four digits of the linked number. The server stores 
 
 ## Enable the backend
 
-Nothing in this change deploys to the live Supabase project or creates a Meta business account.
+The `delete-account` and `whatsapp-webhook` functions are now deployed to the connected project. The database migration and Meta setup remain pending. See [the deployment status and WhatsApp setup guide](WHATSAPP_SETUP.md) before enabling the feature.
 
 1. Back up the database and test the migration in a staging project. An existing project needs the v1-v3 item schema. A fresh project can run `_support/supabase/migration.sql`, which already contains that schema.
 2. Apply `_support/supabase/migrations/202611040001_space_and_whatsapp.sql` once. It adds tables and RPCs without rewriting existing items. Do not rerun it manually after success.
@@ -35,7 +35,7 @@ Nothing in this change deploys to the live Supabase project or creates a Meta bu
    npx supabase --workdir _support functions deploy whatsapp-webhook --project-ref YOUR_PROJECT_REF
    ```
 
-   `_support/supabase/config.toml` disables Supabase JWT verification only for this Meta webhook. The receiver performs HMAC-SHA256 validation of the raw request body before database access. Do not remove that check. Its classifier import points to the same source used by the app; keep the repository intact when bundling.
+   `_support/supabase/config.toml` disables gateway JWT verification for the Meta webhook and deletion endpoint. The receiver performs HMAC-SHA256 validation of the raw request body before database access; deletion validates the caller with Supabase Auth. Do not remove either check. The classifier import points to the same source used by the app; keep the repository intact when bundling. Check your installed CLI's `functions deploy --help` before using the example command; deployment in this session used the Supabase connector.
 
 6. In Meta, configure the callback `https://YOUR_PROJECT_REF.supabase.co/functions/v1/whatsapp-webhook`, supply the matching verification token, and subscribe the app/account to the `messages` webhook field. Follow the current account registration and production-access steps shown in Meta's dashboard.
 7. Test pairing, two messages in one delivery, a retry, an expired token, unknown sender, disconnect, and sender-local “tomorrow” dates with the test business number. Watch the inbox, not just WhatsApp's delivered indicator. The receiver returns 503 for database failures so Meta can retry; log/alert on response counts without collecting message bodies or tokens.
